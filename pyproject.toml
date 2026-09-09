@@ -1,0 +1,75 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "amphour"
+version = "0.1.0"
+description = "Monitor DC power-system gear (Renogy BT-1 over BLE) and export to Prometheus and InfluxDB"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Sky Agnitti" }]
+keywords = ["renogy", "solar", "bluetooth", "ble", "prometheus", "influxdb", "modbus", "off-grid"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Monitoring",
+]
+
+dependencies = [
+    # 3.0.2 specifically: bleak 2.0.0 switched the BlueZ backend to
+    # AcquireNotify, which broke start_notify() on some peripherals
+    # (hbldh/bleak#1885). 3.0.2 restores StartNotify as the default.
+    "bleak>=3.0.2,<4",
+    # bleak asks only for dbus-fast>=1.83.0 with no upper bound, and dbus-fast
+    # went 3.x -> 5.x in six months. Cap it ourselves.
+    "dbus-fast>=5.0.22,<6 ; sys_platform == 'linux'",
+    "prometheus-client>=0.26.0,<1",
+    "requests>=2.32,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0",
+    "pytest-asyncio>=1.3",
+    "ruff>=0.16",
+    "mypy>=2.0",
+    "types-requests",
+]
+
+[project.scripts]
+amphour = "amphour.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/nickodimus/amphour"
+Issues = "https://github.com/nickodimus/amphour/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["amphour"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = ["bleak.*"]
+ignore_missing_imports = true

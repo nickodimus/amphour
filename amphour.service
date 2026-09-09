@@ -1,0 +1,43 @@
+# Install to /etc/systemd/system/amphour.service
+#
+#   sudo install -m 644 amphour.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now amphour
+#
+# Assumes a venv at /opt/amphour with the package installed into it.
+
+[Unit]
+Description=amphour - DC power-system monitor
+Documentation=https://github.com/nickodimus/amphour
+After=bluetooth.target network-online.target
+Wants=bluetooth.target
+
+[Service]
+Type=simple
+ExecStart=/opt/amphour/bin/amphour --config /etc/amphour/config.toml
+Restart=always
+RestartSec=10
+
+# BLE access via BlueZ goes over D-Bus, so no elevated privileges are needed.
+User=amphour
+Group=amphour
+
+# The credentials file, if you use one instead of the config file.
+# EnvironmentFile=-/etc/amphour/env
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_BLUETOOTH
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+# Only needed if [logging] file is set to something under /var/log.
+# ReadWritePaths=/var/log/amphour
+
+[Install]
+WantedBy=multi-user.target

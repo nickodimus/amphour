@@ -1,0 +1,70 @@
+# amphour configuration.
+#
+# Copy to /etc/amphour/config.toml and edit. That path is the default; override
+# it with `amphour --config /somewhere/else.toml`.
+#
+# This file is an EXAMPLE and is tracked in git. The real config.toml is
+# gitignored because it carries credentials.
+
+[device]
+# BLE MAC address of the Renogy BT-1 / BT-TH module. Required.
+# Find it with: bluetoothctl scan on
+address = "AA:BB:CC:DD:EE:FF"
+
+# Optional advertised name. When set, amphour scans for this name and uses
+# whatever address it finds, which survives the module being replaced.
+alias = "BT-TH-XXXXXXXX"
+
+# Optional Bluetooth adapter. Omit to let BlueZ choose.
+adapter = "hci0"
+
+[poll]
+interval = 30.0            # seconds between readings
+connect_timeout = 30.0
+response_timeout = 10.0
+backoff_initial = 5.0      # first retry delay after a connection failure
+backoff_max = 300.0        # ceiling for the exponential backoff
+
+[prometheus]
+enabled = true
+port = 5000
+addr = "0.0.0.0"
+
+# Metric names are this prefix plus the field name, e.g. amphour_battery_voltage.
+# Set to "solarmon_" to keep dashboards built against the old solar-bt-monitor
+# working through a cutover.
+metric_prefix = "amphour_"
+
+# Fields whose register meaning is still a hypothesis are not exported unless
+# you ask for them. See `amphour --list-fields` for which is which.
+include_unverified = false
+
+[influxdb]
+# Off by default. Nothing is written and no connection is attempted unless
+# this is true.
+enabled = false
+url = "http://influxdb.example:8086"
+database = "amphour"
+measurement = "amphour"
+
+# Credentials may be left empty here and supplied instead by environment:
+#   AMPHOUR_INFLUX_USERNAME
+#   AMPHOUR_INFLUX_PASSWORD
+# The environment wins when both are set. Prefer the environment - a config
+# file gets copied, backed up and pasted into terminals.
+username = ""
+password = ""
+
+retention_policy = ""
+batch_size = 60            # points buffered before a write
+flush_interval = 60.0      # seconds before a partial batch is written anyway
+timeout = 10.0
+
+[influxdb.tags]
+host = "my-pi"
+device = "bt1"
+
+[logging]
+level = "INFO"             # DEBUG | INFO | WARNING | ERROR
+file = ""                  # empty = stderr only (systemd captures it)
+keep_days = 14

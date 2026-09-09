@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local configuration carries credentials and site detail. Only the
+# example is tracked.
+config.toml
+/etc/
+*.local.toml
+
+# Working notes stay out of the repo.
+notes/
