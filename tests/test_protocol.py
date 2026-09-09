@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from amphour import protocol
+from amphour.drivers.renogy import protocol
 
 
 def test_request_matches_the_captured_request_byte_for_byte():
