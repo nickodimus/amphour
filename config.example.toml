@@ -4,26 +4,52 @@
 # it with `amphour --config /somewhere/else.toml`.
 #
 # This file is an EXAMPLE and is tracked in git. The real config.toml is
-# gitignored because it carries credentials.
+# gitignored because it carries credentials and site detail.
 
-[device]
-# BLE MAC address of the Renogy BT-1 / BT-TH module. Required.
-# Find it with: bluetoothctl scan on
+# --- devices ---------------------------------------------------------------
+#
+# One [[device]] block per physical device. Note the DOUBLE brackets: [device]
+# is a single table and will be rejected with a message saying so.
+#
+# `name` is free text and must be unique. It becomes the `device` label on every
+# Prometheus metric and a tag on every InfluxDB point, so choose something you
+# will recognise on a dashboard. Renaming a device renames its series.
+#
+# `amphour --list-drivers` prints what is available;
+# `amphour --list-fields <driver>` prints what each one can report.
+
+[[device]]
+name = "renogy"
+driver = "renogy_bt1"
+# BLE MAC of the Renogy BT-1 / BT-TH module. Find it with: bluetoothctl scan on
 address = "AA:BB:CC:DD:EE:FF"
+# Optional advertised name. When set, amphour scans for this name instead of
+# the address, which survives the module being replaced.
+# alias = "BT-TH-XXXXXXXX"
+# adapter = "hci0"
+interval = 30.0
 
-# Optional advertised name. When set, amphour scans for this name and uses
-# whatever address it finds, which survives the module being replaced.
-alias = "BT-TH-XXXXXXXX"
+[[device]]
+name = "smartshunt"
+driver = "victron_vedirect"
+port = "/dev/ttyUSB0"
+baud = 19200
+# How often a reading is published. The device itself streams at about 1 Hz;
+# this throttles what gets stored, it does not slow the device down.
+interval = 30.0
+# Treat the link as failed if no bytes arrive for this long. VE.Direct devices
+# transmit unprompted, so silence is a fault that can be seen directly rather
+# than inferred from values that stop changing.
+# stale_after = 15.0
 
-# Optional Bluetooth adapter. Omit to let BlueZ choose.
-adapter = "hci0"
+# A second VE.Direct device - an MPPT charge controller, say - is the same
+# driver on a different port.
+# [[device]]
+# name = "mppt"
+# driver = "victron_vedirect"
+# port = "/dev/serial/by-id/usb-VictronEnergy_BV_VE_Direct_cable_XXXXXXXX-if00-port0"
 
-[poll]
-interval = 30.0            # seconds between readings
-connect_timeout = 30.0
-response_timeout = 10.0
-backoff_initial = 5.0      # first retry delay after a connection failure
-backoff_max = 300.0        # ceiling for the exponential backoff
+# --- sinks -----------------------------------------------------------------
 
 [prometheus]
 enabled = true
@@ -31,40 +57,39 @@ port = 5000
 addr = "0.0.0.0"
 
 # Metric names are this prefix plus the field name, e.g. amphour_battery_voltage.
-# Set to "solarmon_" to keep dashboards built against the old solar-bt-monitor
-# working through a cutover.
+# Every metric carries a `device` label, so two devices reporting the same field
+# share one metric and can be compared in a single query.
 metric_prefix = "amphour_"
 
-# Fields whose register meaning is still a hypothesis are not exported unless
-# you ask for them. See `amphour --list-fields` for which is which.
+# Fields whose meaning is still a hypothesis are not exported unless you ask.
+# See `amphour --list-fields <driver>` for which is which.
 include_unverified = false
 
 [influxdb]
-# Off by default. Nothing is written and no connection is attempted unless
-# this is true.
+# Off by default. Nothing is written and no connection is attempted unless true.
 enabled = false
 url = "http://influxdb.example:8086"
 database = "amphour"
 measurement = "amphour"
 
-# Credentials may be left empty here and supplied instead by environment:
+# Credentials may be left empty here and supplied by environment instead:
 #   AMPHOUR_INFLUX_USERNAME
 #   AMPHOUR_INFLUX_PASSWORD
-# The environment wins when both are set. Prefer the environment - a config
-# file gets copied, backed up and pasted into terminals.
+# The environment wins when both are set. Prefer it - a config file gets
+# copied, backed up and pasted into terminals.
 username = ""
 password = ""
 
 retention_policy = ""
-batch_size = 60            # points buffered before a write
-flush_interval = 60.0      # seconds before a partial batch is written anyway
+batch_size = 60
+flush_interval = 60.0
 timeout = 10.0
 
+# Extra tags applied to every point. The `device` tag is added automatically.
 [influxdb.tags]
-host = "my-pi"
-device = "bt1"
+site = "home"
 
 [logging]
-level = "INFO"             # DEBUG | INFO | WARNING | ERROR
-file = ""                  # empty = stderr only (systemd captures it)
+level = "INFO"       # DEBUG | INFO | WARNING | ERROR
+file = ""            # empty = stderr only (systemd captures it)
 keep_days = 14

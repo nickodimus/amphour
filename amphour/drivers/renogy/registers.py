@@ -31,12 +31,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final, Literal
 
-Confidence = Literal["confirmed", "probable", "unverified"]
+from ...fields import Confidence, Field
+
 Kind = Literal["u16", "u32", "temp_hi", "temp_lo", "state", "bits"]
 
 
 @dataclass(frozen=True, slots=True)
-class Field:
+class Register:
+    """A Renogy holding register and how to turn it into a Field value."""
+
     name: str
     register: int
     kind: Kind
@@ -44,6 +47,9 @@ class Field:
     unit: str
     confidence: Confidence
     help: str
+
+    def as_field(self) -> Field:
+        return Field(self.name, self.unit, self.confidence, self.help)
 
 
 CHARGING_STATE: Final[dict[int, str]] = {
@@ -56,8 +62,8 @@ CHARGING_STATE: Final[dict[int, str]] = {
     6: "current_limiting",
 }
 
-FIELDS: Final[tuple[Field, ...]] = (
-    Field(
+REGISTERS: Final[tuple[Register, ...]] = (
+    Register(
         "battery_state_of_charge",
         0x0100,
         "u16",
@@ -66,8 +72,10 @@ FIELDS: Final[tuple[Field, ...]] = (
         "confirmed",
         "Battery state of charge",
     ),
-    Field("battery_voltage", 0x0101, "u16", 0.1, "volts", "confirmed", "Battery terminal voltage"),
-    Field(
+    Register(
+        "battery_voltage", 0x0101, "u16", 0.1, "volts", "confirmed", "Battery terminal voltage"
+    ),
+    Register(
         "battery_charging_current",
         0x0102,
         "u16",
@@ -76,7 +84,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "confirmed",
         "Current flowing into the battery from the controller",
     ),
-    Field(
+    Register(
         "controller_temperature",
         0x0103,
         "temp_hi",
@@ -85,7 +93,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "confirmed",
         "Charge controller internal temperature",
     ),
-    Field(
+    Register(
         "battery_temperature",
         0x0103,
         "temp_lo",
@@ -94,7 +102,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "confirmed",
         "Battery temperature sensor",
     ),
-    Field(
+    Register(
         "load_voltage",
         0x0104,
         "u16",
@@ -103,7 +111,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "confirmed",
         "Voltage at the controller's load terminals",
     ),
-    Field(
+    Register(
         "load_current",
         0x0105,
         "u16",
@@ -112,7 +120,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "confirmed",
         "Current drawn through the controller's load terminals",
     ),
-    Field(
+    Register(
         "load_power",
         0x0106,
         "u16",
@@ -121,10 +129,10 @@ FIELDS: Final[tuple[Field, ...]] = (
         "confirmed",
         "Power drawn through the controller's load terminals",
     ),
-    Field("pv_voltage", 0x0107, "u16", 0.1, "volts", "confirmed", "Solar array voltage"),
-    Field("pv_current", 0x0108, "u16", 0.01, "amperes", "confirmed", "Solar array current"),
-    Field("pv_power", 0x0109, "u16", 1, "watts", "confirmed", "Solar array power"),
-    Field(
+    Register("pv_voltage", 0x0107, "u16", 0.1, "volts", "confirmed", "Solar array voltage"),
+    Register("pv_current", 0x0108, "u16", 0.01, "amperes", "confirmed", "Solar array current"),
+    Register("pv_power", 0x0109, "u16", 1, "watts", "confirmed", "Solar array power"),
+    Register(
         "register_0x010a",
         0x010A,
         "u16",
@@ -133,7 +141,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "unverified",
         "Unidentified register; read zero across the whole night capture",
     ),
-    Field(
+    Register(
         "battery_voltage_min_today",
         0x010B,
         "u16",
@@ -142,7 +150,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "probable",
         "Lowest battery voltage seen today",
     ),
-    Field(
+    Register(
         "battery_voltage_max_today",
         0x010C,
         "u16",
@@ -151,7 +159,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "probable",
         "Highest battery voltage seen today",
     ),
-    Field(
+    Register(
         "register_0x010d",
         0x010D,
         "u16",
@@ -167,7 +175,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "lands anywhere sensible (12.30 V). The original match was a coincidence of "
         "the right shape. Exported raw",
     ),
-    Field(
+    Register(
         "discharging_current_max_today",
         0x010E,
         "u16",
@@ -176,7 +184,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "unverified",
         "Peak discharging current today",
     ),
-    Field(
+    Register(
         "charging_power_max_today",
         0x010F,
         "u16",
@@ -185,7 +193,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "confirmed",
         "Peak charging power today",
     ),
-    Field(
+    Register(
         "discharging_power_max_today",
         0x0110,
         "u16",
@@ -194,7 +202,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "confirmed",
         "Peak discharging power today",
     ),
-    Field(
+    Register(
         "charging_amp_hours_today",
         0x0111,
         "u16",
@@ -203,7 +211,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "confirmed",
         "Charge delivered to the battery today",
     ),
-    Field(
+    Register(
         "discharging_amp_hours_today",
         0x0112,
         "u16",
@@ -212,7 +220,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "confirmed",
         "Charge drawn from the battery today",
     ),
-    Field(
+    Register(
         "power_generation_today",
         0x0113,
         "u16",
@@ -221,7 +229,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "confirmed",
         "Energy generated today",
     ),
-    Field(
+    Register(
         "power_consumption_today",
         0x0114,
         "u16",
@@ -230,7 +238,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "unverified",
         "Energy consumed through the load terminals today",
     ),
-    Field(
+    Register(
         "total_operating_days",
         0x0115,
         "u16",
@@ -239,7 +247,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "unverified",
         "Days the controller has been in service",
     ),
-    Field(
+    Register(
         "total_over_discharges",
         0x0116,
         "u16",
@@ -248,7 +256,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "unverified",
         "Cumulative over-discharge events",
     ),
-    Field(
+    Register(
         "total_full_charges",
         0x0117,
         "u16",
@@ -257,7 +265,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "unverified",
         "Cumulative full-charge events",
     ),
-    Field(
+    Register(
         "total_charging_amp_hours",
         0x0118,
         "u32",
@@ -266,7 +274,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "unverified",
         "Lifetime charge delivered to the battery",
     ),
-    Field(
+    Register(
         "total_discharging_amp_hours",
         0x011A,
         "u32",
@@ -275,7 +283,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "unverified",
         "Lifetime charge drawn through the load terminals",
     ),
-    Field(
+    Register(
         "power_generation_total",
         0x011C,
         "u32",
@@ -284,7 +292,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "confirmed",
         "Lifetime energy generated",
     ),
-    Field(
+    Register(
         "power_consumption_total",
         0x011E,
         "u32",
@@ -293,7 +301,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "unverified",
         "Lifetime energy consumed through the load terminals",
     ),
-    Field(
+    Register(
         "charging_state",
         0x0120,
         "state",
@@ -302,7 +310,7 @@ FIELDS: Final[tuple[Field, ...]] = (
         "confirmed",
         "Controller charging stage; see CHARGING_STATE",
     ),
-    Field(
+    Register(
         "register_0x0121",
         0x0121,
         "bits",
@@ -318,8 +326,6 @@ FIELDS: Final[tuple[Field, ...]] = (
     ),
 )
 
-BY_NAME: Final[dict[str, Field]] = {f.name: f for f in FIELDS}
+BY_NAME: Final[dict[str, Register]] = {r.name: r for r in REGISTERS}
 
-DEFAULT_EXPORTED: Final[frozenset[str]] = frozenset(
-    f.name for f in FIELDS if f.confidence in ("confirmed", "probable")
-)
+FIELDS: Final[tuple[Field, ...]] = tuple(r.as_field() for r in REGISTERS)

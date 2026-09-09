@@ -1,16 +1,21 @@
 """Configuration: TOML in, validated dataclasses out.
 
-tomllib is stdlib from Python 3.11, which is the floor for this project, so
-config costs no dependency.
+tomllib is stdlib from 3.11, which is this project's floor, so config costs no
+dependency.
 
-Secrets may be supplied by environment variable instead of living in the file:
+Devices are a list, and each entry names a driver plus whatever that driver
+needs. Unknown keys are an error rather than a silent default, because a
+misspelled option that gets dropped is how a setting appears to be applied
+without being applied.
+
+Secrets may come from the environment instead of the file:
 
     AMPHOUR_INFLUX_USERNAME
     AMPHOUR_INFLUX_PASSWORD
 
-The environment wins over the file when both are present. This is what lets a
-deployment keep credentials out of a file that might be copied, backed up, or
-pasted into a terminal.
+The environment wins over the file. A config file gets copied, backed up and
+pasted into terminals; an environment variable is easier to keep out of all of
+those.
 """
 
 from __future__ import annotations
@@ -29,18 +34,9 @@ class ConfigError(Exception):
 
 @dataclass(frozen=True, slots=True)
 class DeviceConfig:
-    address: str
-    alias: str | None = None
-    adapter: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class PollConfig:
-    interval: float = 30.0
-    connect_timeout: float = 30.0
-    response_timeout: float = 10.0
-    backoff_initial: float = 5.0
-    backoff_max: float = 300.0
+    name: str
+    driver: str
+    options: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,8 +73,7 @@ class LoggingConfig:
 
 @dataclass(frozen=True, slots=True)
 class Config:
-    device: DeviceConfig
-    poll: PollConfig = field(default_factory=PollConfig)
+    devices: tuple[DeviceConfig, ...]
     prometheus: PrometheusConfig = field(default_factory=PrometheusConfig)
     influxdb: InfluxConfig = field(default_factory=InfluxConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
@@ -92,11 +87,6 @@ def _section(raw: dict[str, Any], name: str) -> dict[str, Any]:
 
 
 def _known(cls: Any, data: dict[str, Any], section: str) -> dict[str, Any]:
-    """Reject unknown keys rather than silently ignoring a typo.
-
-    A misspelled option that is quietly dropped is how a setting appears to be
-    applied without being applied.
-    """
     allowed = {f.name for f in dataclasses.fields(cls)}
     unknown = set(data) - allowed
     if unknown:
@@ -105,6 +95,34 @@ def _known(cls: Any, data: dict[str, Any], section: str) -> dict[str, Any]:
             f"Known options: {', '.join(sorted(allowed))}"
         )
     return data
+
+
+def _devices(raw: dict[str, Any]) -> tuple[DeviceConfig, ...]:
+    entries = raw.get("device", [])
+    if isinstance(entries, dict):
+        raise ConfigError("[device] must be a list of tables - write [[device]], not [device]")
+    if not isinstance(entries, list) or not entries:
+        raise ConfigError("at least one [[device]] section is required")
+
+    devices: list[DeviceConfig] = []
+    seen: set[str] = set()
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise ConfigError(f"[[device]] #{index + 1} must be a table")
+        options = dict(entry)
+        name = options.pop("name", None)
+        driver = options.pop("driver", None)
+        if not name:
+            raise ConfigError(f"[[device]] #{index + 1} needs a name")
+        if not driver:
+            raise ConfigError(f"[[device]] {name!r} needs a driver")
+        if name in seen:
+            raise ConfigError(
+                f"two devices are both named {name!r}; names label the metrics and must be unique"
+            )
+        seen.add(str(name))
+        devices.append(DeviceConfig(name=str(name), driver=str(driver), options=options))
+    return tuple(devices)
 
 
 def load(path: str | Path) -> Config:
@@ -119,10 +137,7 @@ def load(path: str | Path) -> Config:
 
 
 def from_dict(raw: dict[str, Any]) -> Config:
-    device_raw = _section(raw, "device")
-    if not device_raw.get("address"):
-        raise ConfigError("[device] address is required (the BLE MAC address)")
-    device = DeviceConfig(**_known(DeviceConfig, device_raw, "device"))
+    devices = _devices(raw)
 
     influx_raw = dict(_section(raw, "influxdb"))
     tags = influx_raw.pop("tags", {})
@@ -130,14 +145,12 @@ def from_dict(raw: dict[str, Any]) -> Config:
         raise ConfigError("[influxdb.tags] must be a table of string keys and values")
     influx_raw = _known(InfluxConfig, influx_raw, "influxdb")
 
-    # environment beats file, so credentials need not be written down
     env_user = os.environ.get("AMPHOUR_INFLUX_USERNAME")
     env_pass = os.environ.get("AMPHOUR_INFLUX_PASSWORD")
     if env_user is not None:
         influx_raw["username"] = env_user
     if env_pass is not None:
         influx_raw["password"] = env_pass
-    # empty strings in TOML mean "not set"
     for key in ("username", "password", "retention_policy"):
         if influx_raw.get(key) == "":
             influx_raw[key] = None
@@ -147,16 +160,13 @@ def from_dict(raw: dict[str, Any]) -> Config:
         raise ConfigError("[influxdb] enabled requires both url and database")
 
     config = Config(
-        device=device,
-        poll=PollConfig(**_known(PollConfig, _section(raw, "poll"), "poll")),
+        devices=devices,
         prometheus=PrometheusConfig(
             **_known(PrometheusConfig, _section(raw, "prometheus"), "prometheus")
         ),
         influxdb=influx,
         logging=LoggingConfig(**_known(LoggingConfig, _section(raw, "logging"), "logging")),
     )
-    if config.poll.interval <= 0:
-        raise ConfigError("[poll] interval must be greater than zero")
     if not config.prometheus.enabled and not config.influxdb.enabled:
         raise ConfigError("no sink enabled: readings would go nowhere")
     return config

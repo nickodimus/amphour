@@ -1,14 +1,49 @@
 # amphour
 
-A monitor for DC power-system gear. It polls a device, decodes its registers,
-and exports the readings to Prometheus and optionally InfluxDB.
+A monitor for DC power-system gear. It reads several devices at once, decodes
+them, and exports the readings to Prometheus and optionally InfluxDB.
 
-Today it speaks to one device: the **Renogy BT-1 / BT-TH** Bluetooth module
-that fronts Renogy charge controllers. The internals are arranged so a second
-driver — a Victron VE.Direct shunt, say — drops in beside it without
-restructuring.
+Runs on Python 3.11+. No vendored libraries, no dead dependencies.
 
-Runs on Python 3.11+ with `bleak`. No vendored libraries, no dead dependencies.
+## Drivers
+
+| driver | speaks to | how |
+|---|---|---|
+| `renogy_bt1` | Renogy BT-1 / BT-TH module fronting a Renogy charge controller | Modbus RTU over a BLE GATT characteristic, polled |
+| `victron_vedirect` | Victron SmartShunt, SmartSolar MPPT, and anything else with a VE.Direct port | plain-text serial, streamed |
+
+Drivers are in-repo and chosen by name in config. There is deliberately no
+entry-point discovery or dynamic third-party loading: that machinery earns its
+keep when strangers write drivers you do not control, and costs complexity for
+nothing when every driver lives in this tree.
+
+Each device runs as its own task, so one failing and retrying never stalls
+another — a BLE module that has wandered off must not hold up a serial shunt
+that is working perfectly.
+
+## One vocabulary across drivers
+
+**Two drivers reporting the same physical quantity use the same field name**,
+and every metric carries a `device` label. So they land on one metric with two
+label values:
+
+```
+amphour_battery_state_of_charge{device="renogy"}      9.0
+amphour_battery_state_of_charge{device="smartshunt"} 99.7
+amphour_battery_voltage{device="renogy"}             11.4
+amphour_battery_voltage{device="smartshunt"}         11.128
+```
+
+That is real output from this repo's fixtures, and it is the point of the
+convention. Two independent measurements of one battery disagreeing by ninety
+points is a thing you want to see in one query — not something split across two
+metric names that never meet. The voltages agreeing to within 0.27 V in the
+same breath cross-validates both readings.
+
+The convention cuts the other way too. A shunt's `battery_current` is net
+current into and out of the bank, signed; a charge controller's
+`battery_charging_current` is only what that controller is delivering. Same
+units, different quantities, so deliberately different names.
 
 ---
 
@@ -61,22 +96,32 @@ privileges. It requires **BlueZ 5.55 or newer** (bleak's own floor).
 ## Use
 
 ```bash
-amphour                          # run against /etc/amphour/config.toml
-amphour --config ./config.toml   # somewhere else
-amphour --once                   # one reading, printed, then exit
-amphour --list-fields            # the register map and its confidence levels
-amphour --decode ff0344...       # decode a captured frame, no hardware needed
+amphour                              # run against /etc/amphour/config.toml
+amphour --config ./config.toml       # somewhere else
+amphour --once                       # one reading from each device, then exit
+amphour --list-drivers               # what drivers exist
+amphour --list-fields renogy_bt1     # a driver's fields and confidence levels
+amphour --decode ff0344...           # decode a captured Renogy frame offline
 ```
 
-`--once` is the commissioning check: it proves the address, the adapter and the
-device all work before anything is installed as a service.
+`--once` is the commissioning check: it proves every configured device is
+reachable and decoding before anything is installed as a service. It works for
+polling and streaming drivers alike — each device runs normally and is stopped
+as soon as it has produced one reading.
 
 ## Configuration
 
 See [`config.example.toml`](config.example.toml). The essentials:
 
 ```toml
-[device]
+[[device]]                       # note the DOUBLE brackets
+name = "smartshunt"              # becomes the `device` label; must be unique
+driver = "victron_vedirect"
+port = "/dev/ttyUSB0"
+
+[[device]]
+name = "renogy"
+driver = "renogy_bt1"
 address = "AA:BB:CC:DD:EE:FF"
 
 [prometheus]
@@ -106,7 +151,7 @@ the cutover. Field names differ (`battery_percentage` became
 
 ---
 
-## The register map, and how much of it to trust
+## The Renogy register map, and how much of it to trust
 
 The device answers a single Modbus read of 34 holding registers from `0x0100`.
 This map was reverse engineered, so every field records how well established it
@@ -185,15 +230,19 @@ fail — connection failures, mid-run dropouts, corrupt frames, exploding sinks.
 
 ### What the fixtures do and do not cover
 
-Two captures, 30 frames, 24 of them unique:
+Everything is captured from live hardware. Nothing is synthesised.
 
-| | frames | conditions |
+| fixture | contents | conditions |
 |---|---|---|
-| `night-2026-09-09` | 11 | array dark; every PV, load and discharge field a legitimate zero |
-| `day-2026-09-09` | 19 | overcast with variable cloud, array producing 180–270 W, charging in `mppt` |
+| `night-2026-09-09` | 11 Renogy frames | array dark; every PV, load and discharge field a legitimate zero |
+| `day-2026-09-09` | 19 Renogy frames | overcast with variable cloud, array producing 180–270 W, charging in `mppt` |
+| `vedirect-smartshunt-2026-09-09` | 12 VE.Direct blocks | a live SmartShunt 500A/50mV, both block types |
+| `vedirect-corrupt-sample` | one corrupt fragment | from a genuinely corrupt region of the same capture |
 
-Together they give **540 field comparisons against the previous
-implementation, with no mismatches.**
+The Renogy fixtures give **540 field comparisons against the previous
+implementation, with no mismatches.** The VE.Direct field meanings were each
+cross-checked against the `description` and `units` an independent
+implementation recorded for the same labels on the same physical device.
 
 The daylight capture closed the gap that mattered: PV voltage, PV current, PV
 power, battery charging current and a non-zero `charging_state` were all
@@ -203,16 +252,22 @@ with dark data fails the suite rather than quietly halving what it tests.
 
 Still not covered, and honestly:
 
+- **No driver has completed a read from real hardware inside this program.**
+  The protocol layers are exercised against real bytes; the transports are not.
+  The BLE path in particular has never connected — the module stops advertising
+  while another client holds it, so it could not be reached from a second host.
 - **The top of the range.** The daylight capture was taken under overcast, not
-  at peak output. Scaling is linear and the largest raw value in play is
-  nowhere near a `u16` ceiling, so this is not a correctness risk — but nothing
-  here has seen a bright day.
+  at peak output. Scaling is linear and the largest raw value in play is nowhere
+  near a `u16` ceiling, so this is not a correctness risk — but nothing here has
+  seen a bright day.
 - **Everything load-side.** `load_voltage`, `load_current`, `load_power` and
-  every discharge counter read zero in both captures, because the controller
-  under test has nothing wired to its load terminals. Those offsets are taken
-  from the register layout and have never returned a non-zero value.
+  every discharge counter read zero in both Renogy captures, because that
+  controller has nothing wired to its load terminals.
 - **Sub-zero temperatures.** The sign-bit convention is implemented from
   documentation; no capture has been below freezing.
+- **The VE.Direct capture is a SmartShunt only.** An MPPT controller emits a
+  different label set over the identical protocol; those labels are declared but
+  have not been seen on the wire here.
 
 ## Licence
 

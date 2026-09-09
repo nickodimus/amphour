@@ -16,15 +16,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Sequence
 from typing import Any
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
+from ..device import Device
+from ..fields import exported
 from ..line_protocol import to_line
 from ..reading import Reading
-from ..registers import DEFAULT_EXPORTED, FIELDS
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +36,7 @@ class InfluxSink:
 
     def __init__(
         self,
+        devices: Sequence[Device],
         *,
         url: str,
         database: str,
@@ -55,7 +58,9 @@ class InfluxSink:
         self.flush_interval = flush_interval
         self.timeout = timeout
         self.retention_policy = retention_policy
-        self._exported = {f.name for f in FIELDS} if include_unverified else set(DEFAULT_EXPORTED)
+        self._allowed = {
+            d.name: exported(d.fields, include_unverified=include_unverified) for d in devices
+        }
         self._buffer: list[str] = []
         self._last_flush = 0.0
         self._lock = asyncio.Lock()
@@ -84,12 +89,23 @@ class InfluxSink:
         return params
 
     async def publish(self, reading: Reading) -> None:
+        allowed = self._allowed.get(reading.source)
         fields: dict[str, Any] = {
-            name: value for name, value in reading.values.items() if name in self._exported
+            name: value
+            for name, value in reading.values.items()
+            if allowed is None or name in allowed
         }
+        # Text readings a Prometheus gauge cannot hold - a model string, an
+        # alarm state - do fit here, so InfluxDB gets the fuller picture.
+        for name, value in reading.text.items():
+            if allowed is None or name in allowed:
+                fields[name] = value
         if not fields:
             return
-        line = to_line(self.measurement, fields, self.tags, reading.taken_at, precision="s")
+        # The device name is a TAG, not a field: it is what the series is split
+        # by, and tags are indexed where fields are not.
+        tags = {**self.tags, "device": reading.source}
+        line = to_line(self.measurement, fields, tags, reading.taken_at, precision="s")
         async with self._lock:
             self._buffer.append(line)
             now = asyncio.get_running_loop().time()

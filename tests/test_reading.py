@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from amphour import protocol
-from amphour.reading import decode
+from amphour.drivers.renogy import decode, protocol
 from tests.conftest import OLD_TO_NEW
 
 
@@ -46,7 +45,7 @@ def test_scaled_values_are_not_polluted_by_float_error(night_capture):
 
 def test_charging_state_maps_to_a_name(night_capture):
     reading = decode(bytes.fromhex(night_capture[0]["frame_hex"]))
-    assert reading.charging_state == "deactivated"
+    assert reading.text["charging_state"] == "deactivated"
 
 
 def test_unknown_charging_state_is_reported_not_hidden(night_capture):
@@ -54,14 +53,14 @@ def test_unknown_charging_state_is_reported_not_hidden(night_capture):
     frame[68] = 0x63  # 99, not a documented stage
     frame[-2:] = protocol.crc16_modbus(bytes(frame[:-2])).to_bytes(2, "little")
     reading = decode(bytes(frame))
-    assert reading.charging_state == "unknown_99"
+    assert reading.text["charging_state"] == "unknown_99"
 
 
 def test_every_declared_field_is_produced(all_frames):
-    from amphour.registers import FIELDS
+    from amphour.drivers.renogy.registers import REGISTERS
 
     reading = decode(bytes.fromhex(all_frames[0]["frame_hex"]))
-    assert set(reading.values) == {f.name for f in FIELDS}
+    assert set(reading.values) == {r.name for r in REGISTERS}
 
 
 def test_daily_min_max_voltage_brackets_the_live_reading(all_frames):
@@ -124,7 +123,7 @@ def test_daylight_exercises_a_real_charging_state(day_capture):
     nothing about whether the state mapping works."""
     if not day_capture:
         pytest.skip("no daylight fixture")
-    states = {decode(bytes.fromhex(e["frame_hex"])).charging_state for e in day_capture}
+    states = {decode(bytes.fromhex(e["frame_hex"])).text["charging_state"] for e in day_capture}
     assert states - {"deactivated"}, f"only saw 'deactivated': {states}"
     assert not any(s.startswith("unknown_") for s in states), states
 
