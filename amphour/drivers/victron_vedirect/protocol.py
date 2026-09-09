@@ -74,6 +74,15 @@ class BlockReader:
         self.blocks_ok = 0
         self.blocks_bad = 0
 
+    @property
+    def pending(self) -> int:
+        """Bytes buffered but not yet part of a complete block.
+
+        Exposed so a caller - or a test - can confirm the framer is not
+        accumulating without bound on a stream it never manages to frame.
+        """
+        return len(self._buf)
+
     def feed(self, data: bytes) -> Iterator[dict[str, str]]:
         self._buf.extend(data)
         marker = RECORD_SEP + CHECKSUM_LABEL + FIELD_SEP

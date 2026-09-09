@@ -115,3 +115,56 @@ def test_scaling_produces_clean_numbers(blocks):
     volts = round(int(parsed["V"]) * BY_LABEL["V"].scale, 3)
     assert volts == float(f"{volts:.3f}")
     assert 0 < volts < 100
+
+
+def test_framer_survives_the_whole_raw_capture_corruption_and_all():
+    """The harshest test available: 59 KB of unedited serial capture.
+
+    That capture was taken with an external `stty` followed by a separate
+    `cat`, which leaves the port closed in between; the result contained
+    genuinely corrupt regions - duplicated fragments, lost bytes, a label
+    reading `H16\\nH7` - alongside 88 blocks that verify perfectly.
+
+    Keeping it is deliberate. Clean fixtures prove the parser handles good
+    input; this one proves the framer does not derail on bad input, which is
+    what a wedged USB adapter actually produces.
+    """
+    import random
+
+    raw = (FIXTURES / "vedirect-raw-stream-2026-09-09.bin").read_bytes()
+    random.seed(1)
+    reader = BlockReader()
+    out = []
+    pos = 0
+    while pos < len(raw):  # irregular chunks, as a serial read delivers them
+        step = random.randint(1, 300)
+        out.extend(reader.feed(raw[pos : pos + step]))
+        pos += step
+
+    assert reader.blocks_ok == 88, "every checksum-valid block must be recovered"
+    assert reader.blocks_bad > 0, "the corrupt regions must actually be rejected"
+    assert reader.pending < 2048, "buffer must stay bounded"
+
+    main = [b for b in out if "SOC" in b]
+    history = [b for b in out if "H18" in b]
+    assert len(main) == 44
+    assert len(history) == 44
+
+    # nothing incoherent got through the checksum
+    for block in main:
+        assert 0 <= int(block["SOC"]) <= 1000
+        assert 5_000 < int(block["V"]) < 70_000
+
+
+def test_no_corrupt_block_is_ever_yielded():
+    """A block that fails its checksum must be dropped, not repaired.
+
+    A VE.Direct block with a bad checksum is indistinguishable from correctly
+    framed nonsense, so guessing at it would manufacture readings.
+    """
+    raw = (FIXTURES / "vedirect-raw-stream-2026-09-09.bin").read_bytes()
+    reader = BlockReader()
+    for block in reader.feed(raw):
+        for label, value in block.items():
+            if label.startswith("H") or label in {"V", "I", "P", "CE", "SOC", "TTG"}:
+                int(value)  # raises if the checksum let through a mangled number
