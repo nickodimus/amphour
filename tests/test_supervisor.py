@@ -11,7 +11,7 @@ import asyncio
 
 import pytest
 
-from amphour.device import DeviceError, PollingDevice
+from amphour.device import DeviceError, PollingDevice, StreamingDevice
 from amphour.fields import Field
 from amphour.reading import Reading
 from amphour.supervisor import Supervisor
@@ -170,6 +170,88 @@ async def test_backoff_escalates_while_reads_keep_failing():
         sup.stop()
         await task
     assert device._backoff > 0.02, "backoff never grew; it is being reset every cycle"
+
+
+class NeverStreamsDevice(StreamingDevice):
+    """Opens perfectly, then the stream fails immediately, every time.
+
+    The streaming twin of NeverReadsDevice. With the VE.Direct noise check in
+    place this is a real shape, not a hypothetical: a link delivering bytes
+    that never frame now raises DeviceTimeout out of stream() on every attempt
+    while open() keeps succeeding.
+    """
+
+    fields = FIELDS
+
+    def __init__(self, name="opens-but-never-streams", **kwargs):
+        super().__init__(name, **kwargs)
+        self.opens = self.closes = 0
+
+    async def open(self):
+        self.opens += 1
+
+    async def close(self):
+        self.closes += 1
+
+    async def stream(self):
+        for _ in ():  # never runs; it is what makes this an async generator
+            yield
+        await asyncio.sleep(0)
+        raise DeviceError("connected, but the stream never produced anything")
+
+
+class OneReadingThenFailsDevice(StreamingDevice):
+    """Yields one reading, then fails - the shape that SHOULD reset backoff."""
+
+    fields = FIELDS
+
+    def __init__(self, name="flaky-stream", **kwargs):
+        super().__init__(name, **kwargs)
+        self.opens = self.closes = 0
+
+    async def open(self):
+        self.opens += 1
+
+    async def close(self):
+        self.closes += 1
+
+    async def stream(self):
+        await asyncio.sleep(0)
+        yield Reading(source=self.name, values={"battery_voltage": 12.8})
+        raise DeviceError("stream dropped after one reading")
+
+
+async def test_streaming_backoff_escalates_while_the_stream_keeps_failing():
+    """A successful open() must not reset the backoff, same as PollingDevice.
+
+    Without this the device retries at backoff_initial forever: it cannot
+    spin, because run() sleeps at the end of its loop, but it never backs
+    away from a device that is not coming back either.
+    """
+    device = NeverStreamsDevice(backoff_initial=0.02, backoff_max=1.0)
+    sup = Supervisor([device], [RecordingSink()])
+    task = asyncio.create_task(sup.run())
+    try:
+        await asyncio.sleep(0.3)
+    finally:
+        sup.stop()
+        await task
+    assert device._backoff > 0.02, "backoff never grew; it is being reset every cycle"
+
+
+async def test_a_streaming_device_that_produces_a_reading_resets_its_backoff():
+    """The other half: real progress must clear the penalty."""
+    device = OneReadingThenFailsDevice(backoff_initial=0.02, backoff_max=1.0)
+    sink = RecordingSink()
+    sup = Supervisor([device], [sink])
+    task = asyncio.create_task(sup.run())
+    try:
+        await asyncio.sleep(0.3)
+    finally:
+        sup.stop()
+        await task
+    assert len(sink.readings) >= 2, "device should keep producing across reconnects"
+    assert device._backoff == 0.02, "a reading arrived; the backoff should be back to initial"
 
 
 async def test_open_failures_back_off_then_succeed():

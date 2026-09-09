@@ -158,9 +158,17 @@ class StreamingDevice(_RetryingDevice):
                 await self._sleep_backoff()
                 continue
 
-            self._reset_backoff()
             try:
                 async for reading in self.stream():
+                    # Backoff resets on PROGRESS, never on a successful open -
+                    # the same rule as PollingDevice. A device whose port opens
+                    # cleanly and whose stream fails every time would otherwise
+                    # clear the counter every cycle and retry at backoff_initial
+                    # forever, never backing away from a link that is not coming
+                    # back. With the VE.Direct noise check in place that is a
+                    # real shape: bytes arrive, nothing frames, stream() raises,
+                    # open() keeps succeeding.
+                    self._reset_backoff()
                     await emit(reading)
                 log.warning("[%s] stream ended", self.name)
             except DeviceError as exc:
