@@ -37,9 +37,16 @@ baud = 19200
 # How often a reading is published. The device itself streams at about 1 Hz;
 # this throttles what gets stored, it does not slow the device down.
 interval = 30.0
-# Treat the link as failed if no bytes arrive for this long. VE.Direct devices
-# transmit unprompted, so silence is a fault that can be seen directly rather
-# than inferred from values that stop changing.
+# Treat the link as failed if this long passes without a VALID block. VE.Direct
+# devices transmit unprompted about once a second, so both faults are visible
+# directly rather than inferred from values that stop changing:
+#   - no bytes at all        -> "no data on <port> for Ns"
+#   - bytes that never frame -> "no valid block for Ns (N rejected, N accepted,
+#                               N bytes unframed)"
+# The second matters because a noisy link delivers bytes forever and would
+# otherwise look identical to a healthy quiet system. The counts in the message
+# separate a marginal cable (blocks frame, checksums fail) from a wrong baud
+# rate or wrong port (nothing frames at all, bytes pile up unframed).
 # stale_after = 15.0
 
 # A second VE.Direct device - an MPPT charge controller, say - is the same

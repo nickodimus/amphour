@@ -8,11 +8,15 @@ device, which is why they are marked `confirmed`.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 from pathlib import Path
 
 import pytest
 
+from amphour.device import DeviceTimeout
+from amphour.drivers.victron_vedirect import VEDirectDevice
 from amphour.drivers.victron_vedirect.fields import BY_LABEL, FIELDS
 from amphour.drivers.victron_vedirect.protocol import (
     BlockReader,
@@ -168,3 +172,65 @@ def test_no_corrupt_block_is_ever_yielded():
         for label, value in block.items():
             if label.startswith("H") or label in {"V", "I", "P", "CE", "SOC", "TTG"}:
                 int(value)  # raises if the checksum let through a mangled number
+
+
+# --- device-level staleness -------------------------------------------------
+#
+# The framer above is well covered. What was not covered is what the DEVICE
+# does when the framer keeps rejecting everything: stream()'s timeout wrapped
+# only the queue read, so a link delivering bytes that never frame never timed
+# out, never emitted, and looked perfectly alive from outside.
+
+
+async def _feed(device, payload, period=0.01):
+    """Push bytes at the device's queue until cancelled."""
+    while True:
+        with contextlib.suppress(asyncio.QueueFull):
+            device._queue.put_nowait(payload)
+        await asyncio.sleep(period)
+
+
+async def _drain(device, budget=2.0):
+    """Consume stream() to completion, bounded, so a hang fails as a timeout."""
+    async with asyncio.timeout(budget):
+        async for _ in device.stream():
+            pass
+
+
+async def test_bytes_that_never_frame_are_a_fault_not_a_silence(blocks):
+    """Garbage on the wire must be detectable. Silence already was."""
+    device = VEDirectDevice("shunt", "/dev/null", stale_after=0.2, emit_interval=0.0)
+    feeder = asyncio.create_task(_feed(device, b"\x00\xff not a ve.direct block \x7f"))
+    try:
+        with pytest.raises(DeviceTimeout) as caught:
+            await _drain(device)
+    finally:
+        feeder.cancel()
+        await asyncio.gather(feeder, return_exceptions=True)
+    assert "block" in str(caught.value).lower()
+
+
+async def test_total_silence_is_still_reported(blocks):
+    device = VEDirectDevice("shunt", "/dev/null", stale_after=0.2, emit_interval=0.0)
+    with pytest.raises(DeviceTimeout):
+        await _drain(device)
+
+
+async def test_a_healthy_stream_is_not_called_stale(blocks):
+    """The new check must not fire while real blocks are arriving."""
+    main = next(b for b in blocks if b["kind"] == "main")
+    good = bytes.fromhex(main["block_hex"])
+    device = VEDirectDevice("shunt", "/dev/null", stale_after=0.3, emit_interval=0.0)
+    feeder = asyncio.create_task(_feed(device, good, period=0.02))
+    seen = []
+    try:
+        async with asyncio.timeout(1.0):
+            async for reading in device.stream():
+                seen.append(reading)
+                if len(seen) >= 3:
+                    break
+    finally:
+        feeder.cancel()
+        await asyncio.gather(feeder, return_exceptions=True)
+    assert len(seen) >= 3
+    assert seen[0].values["battery_voltage"] > 0

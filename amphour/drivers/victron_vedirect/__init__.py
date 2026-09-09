@@ -163,6 +163,7 @@ class VEDirectDevice(StreamingDevice):
 
     async def stream(self) -> AsyncIterator[Reading]:
         loop = asyncio.get_running_loop()
+        last_block = loop.time()
         while True:
             try:
                 async with asyncio.timeout(self.stale_after):
@@ -173,10 +174,35 @@ class VEDirectDevice(StreamingDevice):
                 # having to infer staleness from values that stop changing.
                 raise DeviceTimeout(f"no data on {self.port} for {self.stale_after}s") from exc
 
+            framed = False
             for block in self._reader.feed(chunk):
                 self._latest.update(block)
+                framed = True
 
             now = loop.time()
+            if framed:
+                last_block = now
+            elif now - last_block >= self.stale_after:
+                # Bytes ARE arriving, so the silence check above can never fire,
+                # yet none of them frame. Without this a noisy link streams
+                # forever, emits nothing, and reports no fault - which from
+                # outside is indistinguishable from a healthy becalmed system.
+                # The rejection counts go in the message because they separate
+                # "the wire is quiet" from "the wire is lying", which need
+                # different repairs: a cable or a baud rate, not a reboot.
+                # pending distinguishes the two noise modes, which have
+                # different causes: blocks that FRAME but fail checksum push
+                # blocks_bad up (a marginal cable, interference), while bytes
+                # that never even contain a Checksum record leave both counters
+                # at zero and pile up in the buffer instead (wrong baud rate,
+                # wrong port, a device speaking something else entirely).
+                raise DeviceTimeout(
+                    f"data arriving on {self.port} but no valid block for "
+                    f"{now - last_block:.1f}s ({self._reader.blocks_bad} rejected, "
+                    f"{self._reader.blocks_ok} accepted since connect, "
+                    f"{self._reader.pending} bytes unframed)"
+                )
+
             # Emit only once the instantaneous block has been seen, so a
             # reading is never published from history counters alone.
             if "V" in self._latest and now - self._last_emit >= self.emit_interval:
