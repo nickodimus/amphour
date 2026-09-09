@@ -23,7 +23,8 @@ import logging
 
 from bleak import BleakClient, BleakScanner
 from bleak.args.bluez import BlueZClientArgs, BlueZScannerArgs
-from bleak.exc import BleakError
+from bleak.backends.device import BLEDevice
+from bleak.exc import BleakDeviceNotFoundError, BleakError
 
 from ..transport import TransportError, TransportTimeout
 
@@ -64,40 +65,76 @@ class RenogyBT1Transport:
     def is_connected(self) -> bool:
         return self._client is not None and self._client.is_connected
 
-    async def _resolve_address(self) -> str:
-        """Scan for the device if we were given an alias instead of an address.
+    def _scanner_args(self) -> BlueZScannerArgs:
+        return {"adapter": self.adapter} if self.adapter else {}
 
-        BlueZ will happily connect by address without scanning when the device
-        is already known, so this only runs when an alias was configured.
+    async def _scan_for_device(self) -> BLEDevice | None:
+        """Find the device by advertised name if configured, else by address.
+
+        BlueZ will only connect to an address it already knows about, so a
+        cold start - or a device that has been away long enough to be evicted
+        from bluetoothd's cache - fails with BleakDeviceNotFoundError until a
+        scan has seen it advertise. Passing the discovered BLEDevice to
+        BleakClient sidesteps the cache entirely.
+
+        Note that a BLE peripheral stops advertising while another central is
+        connected to it. If the device is held by something else, this scan
+        finds nothing however long it runs.
         """
-        if not self.alias:
-            return self.address
-        log.info("scanning up to %.0fs for alias %r", self.scan_timeout, self.alias)
-        scanner_args: BlueZScannerArgs = {"adapter": self.adapter} if self.adapter else {}
-        device = await BleakScanner.find_device_by_name(
-            self.alias, timeout=self.scan_timeout, bluez=scanner_args
+        if self.alias:
+            log.info("scanning up to %.0fs for alias %r", self.scan_timeout, self.alias)
+            return await BleakScanner.find_device_by_name(
+                self.alias, timeout=self.scan_timeout, bluez=self._scanner_args()
+            )
+        log.info("scanning up to %.0fs for %s", self.scan_timeout, self.address)
+        return await BleakScanner.find_device_by_address(
+            self.address, timeout=self.scan_timeout, bluez=self._scanner_args()
         )
-        if device is None:
-            raise TransportError(f"no BLE device advertising alias {self.alias!r}")
-        log.info("alias %r resolved to %s", self.alias, device.address)
-        return device.address
+
+    async def _open(self, target: BLEDevice | str) -> BleakClient:
+        client_args: BlueZClientArgs = {"adapter": self.adapter} if self.adapter else {}
+        client = BleakClient(target, timeout=self.connect_timeout, bluez=client_args)
+        await client.connect()
+        await client.start_notify(NOTIFY_CHAR_UUID, self._on_notify)
+        return client
 
     async def connect(self) -> None:
-        address = await self._resolve_address()
-        # bleak 3.x: the `adapter=` kwarg is deprecated in favour of `bluez=`.
-        client_args: BlueZClientArgs = {"adapter": self.adapter} if self.adapter else {}
-        client = BleakClient(address, timeout=self.connect_timeout, bluez=client_args)
+        # Fast path: connect straight to the address, which works whenever
+        # BlueZ already knows the device. Fall back to a scan only when it
+        # does not, so the steady-state reconnect stays quick.
+        target: BLEDevice | str = self.address
+        if self.alias:
+            found = await self._scan_for_device()
+            if found is None:
+                raise TransportError(f"no device advertising alias {self.alias!r}")
+            target = found
+
+        client: BleakClient | None = None
         try:
-            await client.connect()
-            await client.start_notify(NOTIFY_CHAR_UUID, self._on_notify)
+            try:
+                client = await self._open(target)
+            except BleakDeviceNotFoundError:
+                if self.alias:
+                    raise
+                log.info("%s unknown to BlueZ; scanning for it", self.address)
+                found = await self._scan_for_device()
+                if found is None:
+                    raise TransportError(
+                        f"{self.address} not found by scan. It may be out of range, "
+                        f"powered down, or already connected to another client - a "
+                        f"BLE peripheral stops advertising while a central holds it"
+                    ) from None
+                client = await self._open(found)
         except BleakError as exc:
-            # best effort: the connection is already failing, a failure to
-            # tear it down adds nothing the caller can act on
-            with contextlib.suppress(BleakError):
-                await client.disconnect()
+            if client is not None:
+                # best effort: the connection is already failing, a failure to
+                # tear it down adds nothing the caller can act on
+                with contextlib.suppress(BleakError):
+                    await client.disconnect()
             raise TransportError(f"connect failed: {exc}") from exc
+
         self._client = client
-        log.info("connected to %s", address)
+        log.info("connected to %s", self.address)
 
     async def disconnect(self) -> None:
         client, self._client = self._client, None
