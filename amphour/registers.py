@@ -152,13 +152,20 @@ FIELDS: Final[tuple[Field, ...]] = (
         "Highest battery voltage seen today",
     ),
     Field(
-        "charging_current_max_today",
+        "register_0x010d",
         0x010D,
         "u16",
-        0.01,
-        "amperes",
-        "probable",
-        "Peak charging current today",
+        1,
+        "raw",
+        "unverified",
+        "Unidentified. Read as 'peak charging current today' (scale 0.01) on the "
+        "night of 2026-09-09, because 802 W / 56.53 A gives 14.19 V - a plausible "
+        "absorption voltage. A daylight capture the next morning DISCONFIRMED that: "
+        "the value did not reset overnight (5653 -> 5616) while "
+        "charging_power_max_today did (802 -> 691 W); 56.16 A is inconsistent with "
+        "the 22.76 A actually observed that morning; and the voltage ratio no longer "
+        "lands anywhere sensible (12.30 V). The original match was a coincidence of "
+        "the right shape. Exported raw",
     ),
     Field(
         "discharging_current_max_today",
@@ -296,15 +303,18 @@ FIELDS: Final[tuple[Field, ...]] = (
         "Controller charging stage; see CHARGING_STATE",
     ),
     Field(
-        "fault_bits",
+        "register_0x0121",
         0x0121,
         "bits",
         1,
         "bitfield",
         "unverified",
-        "Sits immediately after charging state, so probably fault/alarm bits. "
-        "Read 0x0004 constantly through the night capture. No verified bit map, "
-        "so this is exported raw and deliberately not decoded into named faults",
+        "Sits immediately after charging state. First guessed to be fault/alarm bits, "
+        "but across 30 captured frames it tracks charging_state exactly: state 0 -> 4 "
+        "(11/11 frames), state 2 -> 1 (19/19 frames), no exceptions. That is a "
+        "companion status word, not an independent fault register. Only two charging "
+        "states have been observed, so this is suggestive, not proven. Exported raw "
+        "and deliberately not decoded into named faults",
     ),
 )
 

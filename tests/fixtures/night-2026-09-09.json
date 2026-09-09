@@ -1,13 +1,9 @@
 [
   {
-    "capture_offset_s": 29.310695,
-    "wall_clock": "2026-09-09T00:07:12.310695",
+    "wall_clock": "2026-09-09T00:07:12",
     "frame_hex": "ff0344001000730000121700000000000000000000000000000071007616150000032200000091000007950000056705d303e500034f4100000000003b5ca30000000000000004308a",
     "frame_len": 73,
-    "crc_sent": "0x308a",
-    "crc_calc": "0x8a30",
-    "crc_valid": true,
-    "expected": {
+    "old_app_log": {
       "battery_percentage": 16,
       "battery_voltage": 11.5,
       "battery_current": 0.0,
@@ -27,34 +23,15 @@
       "power_generation_total": 3890339,
       "charging_status": 0
     },
-    "unmapped": {
-      "reg_0x010A_raw": 0,
-      "battery_voltage_min_today?": 11.3,
-      "battery_voltage_max_today?": 11.8,
-      "reg_0x010D_raw": 5653,
-      "reg_0x010E_raw": 0,
-      "power_consumption_today?": 0,
-      "reg_0x0115_raw": 1383,
-      "reg_0x0116_raw": 1491,
-      "reg_0x0117_raw": 997,
-      "total_charging_amp_hours?": 216897,
-      "reg_0x011C_0x011D_raw": 0,
-      "reg_0x011E_0x011F_raw": 0,
-      "fault_bits?": 4,
-      "trailing_byte": 4
-    },
-    "old_app_log_delta_s": 0.310695,
-    "agrees_with_old_app": true
+    "old_app_log_time": "2026-09-09T00:07:12",
+    "pair_skew_s": 0.311,
+    "note": "array dark; controller load terminals unused, so all load/discharge fields are a legitimate zero"
   },
   {
-    "capture_offset_s": 59.573641,
-    "wall_clock": "2026-09-09T00:07:42.573641",
+    "wall_clock": "2026-09-09T00:07:42",
     "frame_hex": "ff0344001100730000121700000000000000000000000000000071007616150000032200000091000007950000056705d303e500034f4100000000003b5ca300000000000000042576",
     "frame_len": 73,
-    "crc_sent": "0x2576",
-    "crc_calc": "0x7625",
-    "crc_valid": true,
-    "expected": {
+    "old_app_log": {
       "battery_percentage": 17,
       "battery_voltage": 11.5,
       "battery_current": 0.0,
@@ -74,34 +51,15 @@
       "power_generation_total": 3890339,
       "charging_status": 0
     },
-    "unmapped": {
-      "reg_0x010A_raw": 0,
-      "battery_voltage_min_today?": 11.3,
-      "battery_voltage_max_today?": 11.8,
-      "reg_0x010D_raw": 5653,
-      "reg_0x010E_raw": 0,
-      "power_consumption_today?": 0,
-      "reg_0x0115_raw": 1383,
-      "reg_0x0116_raw": 1491,
-      "reg_0x0117_raw": 997,
-      "total_charging_amp_hours?": 216897,
-      "reg_0x011C_0x011D_raw": 0,
-      "reg_0x011E_0x011F_raw": 0,
-      "fault_bits?": 4,
-      "trailing_byte": 4
-    },
-    "old_app_log_delta_s": 0.573641,
-    "agrees_with_old_app": true
+    "old_app_log_time": "2026-09-09T00:07:42",
+    "pair_skew_s": 0.574,
+    "note": "array dark; controller load terminals unused, so all load/discharge fields are a legitimate zero"
   },
   {
-    "capture_offset_s": 89.874099,
-    "wall_clock": "2026-09-09T00:08:12.874099",
+    "wall_clock": "2026-09-09T00:08:12",
     "frame_hex": "ff0344000f00730000121700000000000000000000000000000071007616150000032200000091000007950000056705d303e500034f4100000000003b5ca30000000000000004bb5f",
     "frame_len": 73,
-    "crc_sent": "0xbb5f",
-    "crc_calc": "0x5fbb",
-    "crc_valid": true,
-    "expected": {
+    "old_app_log": {
       "battery_percentage": 15,
       "battery_voltage": 11.5,
       "battery_current": 0.0,
@@ -121,34 +79,15 @@
       "power_generation_total": 3890339,
       "charging_status": 0
     },
-    "unmapped": {
-      "reg_0x010A_raw": 0,
-      "battery_voltage_min_today?": 11.3,
-      "battery_voltage_max_today?": 11.8,
-      "reg_0x010D_raw": 5653,
-      "reg_0x010E_raw": 0,
-      "power_consumption_today?": 0,
-      "reg_0x0115_raw": 1383,
-      "reg_0x0116_raw": 1491,
-      "reg_0x0117_raw": 997,
-      "total_charging_amp_hours?": 216897,
-      "reg_0x011C_0x011D_raw": 0,
-      "reg_0x011E_0x011F_raw": 0,
-      "fault_bits?": 4,
-      "trailing_byte": 4
-    },
-    "old_app_log_delta_s": 0.874099,
-    "agrees_with_old_app": true
+    "old_app_log_time": "2026-09-09T00:08:12",
+    "pair_skew_s": 0.874,
+    "note": "array dark; controller load terminals unused, so all load/discharge fields are a legitimate zero"
   },
   {
-    "capture_offset_s": 120.155776,
-    "wall_clock": "2026-09-09T00:08:43.155776",
+    "wall_clock": "2026-09-09T00:08:43",
     "frame_hex": "ff0344001100730000121800000000000000000000000000000071007616150000032200000091000007950000056705d303e500034f4100000000003b5ca300000000000000043173",
     "frame_len": 73,
-    "crc_sent": "0x3173",
-    "crc_calc": "0x7331",
-    "crc_valid": true,
-    "expected": {
+    "old_app_log": {
       "battery_percentage": 17,
       "battery_voltage": 11.5,
       "battery_current": 0.0,
@@ -168,34 +107,15 @@
       "power_generation_total": 3890339,
       "charging_status": 0
     },
-    "unmapped": {
-      "reg_0x010A_raw": 0,
-      "battery_voltage_min_today?": 11.3,
-      "battery_voltage_max_today?": 11.8,
-      "reg_0x010D_raw": 5653,
-      "reg_0x010E_raw": 0,
-      "power_consumption_today?": 0,
-      "reg_0x0115_raw": 1383,
-      "reg_0x0116_raw": 1491,
-      "reg_0x0117_raw": 997,
-      "total_charging_amp_hours?": 216897,
-      "reg_0x011C_0x011D_raw": 0,
-      "reg_0x011E_0x011F_raw": 0,
-      "fault_bits?": 4,
-      "trailing_byte": 4
-    },
-    "old_app_log_delta_s": 0.155776,
-    "agrees_with_old_app": true
+    "old_app_log_time": "2026-09-09T00:08:43",
+    "pair_skew_s": 0.156,
+    "note": "array dark; controller load terminals unused, so all load/discharge fields are a legitimate zero"
   },
   {
-    "capture_offset_s": 150.418755,
-    "wall_clock": "2026-09-09T00:09:13.418755",
+    "wall_clock": "2026-09-09T00:09:13",
     "frame_hex": "ff0344001100730000121800000000000000000000000000000071007616150000032200000091000007950000056705d303e500034f4100000000003b5ca300000000000000043173",
     "frame_len": 73,
-    "crc_sent": "0x3173",
-    "crc_calc": "0x7331",
-    "crc_valid": true,
-    "expected": {
+    "old_app_log": {
       "battery_percentage": 17,
       "battery_voltage": 11.5,
       "battery_current": 0.0,
@@ -215,34 +135,15 @@
       "power_generation_total": 3890339,
       "charging_status": 0
     },
-    "unmapped": {
-      "reg_0x010A_raw": 0,
-      "battery_voltage_min_today?": 11.3,
-      "battery_voltage_max_today?": 11.8,
-      "reg_0x010D_raw": 5653,
-      "reg_0x010E_raw": 0,
-      "power_consumption_today?": 0,
-      "reg_0x0115_raw": 1383,
-      "reg_0x0116_raw": 1491,
-      "reg_0x0117_raw": 997,
-      "total_charging_amp_hours?": 216897,
-      "reg_0x011C_0x011D_raw": 0,
-      "reg_0x011E_0x011F_raw": 0,
-      "fault_bits?": 4,
-      "trailing_byte": 4
-    },
-    "old_app_log_delta_s": 0.418755,
-    "agrees_with_old_app": true
+    "old_app_log_time": "2026-09-09T00:09:13",
+    "pair_skew_s": 0.419,
+    "note": "array dark; controller load terminals unused, so all load/discharge fields are a legitimate zero"
   },
   {
-    "capture_offset_s": 180.700422,
-    "wall_clock": "2026-09-09T00:09:43.700422",
+    "wall_clock": "2026-09-09T00:09:43",
     "frame_hex": "ff0344001100730000121700000000000000000000000000000071007616150000032200000091000007950000056705d303e500034f4100000000003b5ca300000000000000042576",
     "frame_len": 73,
-    "crc_sent": "0x2576",
-    "crc_calc": "0x7625",
-    "crc_valid": true,
-    "expected": {
+    "old_app_log": {
       "battery_percentage": 17,
       "battery_voltage": 11.5,
       "battery_current": 0.0,
@@ -262,34 +163,15 @@
       "power_generation_total": 3890339,
       "charging_status": 0
     },
-    "unmapped": {
-      "reg_0x010A_raw": 0,
-      "battery_voltage_min_today?": 11.3,
-      "battery_voltage_max_today?": 11.8,
-      "reg_0x010D_raw": 5653,
-      "reg_0x010E_raw": 0,
-      "power_consumption_today?": 0,
-      "reg_0x0115_raw": 1383,
-      "reg_0x0116_raw": 1491,
-      "reg_0x0117_raw": 997,
-      "total_charging_amp_hours?": 216897,
-      "reg_0x011C_0x011D_raw": 0,
-      "reg_0x011E_0x011F_raw": 0,
-      "fault_bits?": 4,
-      "trailing_byte": 4
-    },
-    "old_app_log_delta_s": 0.700422,
-    "agrees_with_old_app": true
+    "old_app_log_time": "2026-09-09T00:09:43",
+    "pair_skew_s": 0.7,
+    "note": "array dark; controller load terminals unused, so all load/discharge fields are a legitimate zero"
   },
   {
-    "capture_offset_s": 210.96338,
-    "wall_clock": "2026-09-09T00:10:13.963380",
+    "wall_clock": "2026-09-09T00:10:13",
     "frame_hex": "ff0344001100730000121700000000000000000000000000000071007616150000032200000091000007950000056705d303e500034f4100000000003b5ca300000000000000042576",
     "frame_len": 73,
-    "crc_sent": "0x2576",
-    "crc_calc": "0x7625",
-    "crc_valid": true,
-    "expected": {
+    "old_app_log": {
       "battery_percentage": 17,
       "battery_voltage": 11.5,
       "battery_current": 0.0,
@@ -309,34 +191,15 @@
       "power_generation_total": 3890339,
       "charging_status": 0
     },
-    "unmapped": {
-      "reg_0x010A_raw": 0,
-      "battery_voltage_min_today?": 11.3,
-      "battery_voltage_max_today?": 11.8,
-      "reg_0x010D_raw": 5653,
-      "reg_0x010E_raw": 0,
-      "power_consumption_today?": 0,
-      "reg_0x0115_raw": 1383,
-      "reg_0x0116_raw": 1491,
-      "reg_0x0117_raw": 997,
-      "total_charging_amp_hours?": 216897,
-      "reg_0x011C_0x011D_raw": 0,
-      "reg_0x011E_0x011F_raw": 0,
-      "fault_bits?": 4,
-      "trailing_byte": 4
-    },
-    "old_app_log_delta_s": 0.96338,
-    "agrees_with_old_app": true
+    "old_app_log_time": "2026-09-09T00:10:13",
+    "pair_skew_s": 0.963,
+    "note": "array dark; controller load terminals unused, so all load/discharge fields are a legitimate zero"
   },
   {
-    "capture_offset_s": 241.226351,
-    "wall_clock": "2026-09-09T00:10:44.226351",
+    "wall_clock": "2026-09-09T00:10:44",
     "frame_hex": "ff0344001100730000121800000000000000000000000000000071007616150000032200000091000007950000056705d303e500034f4100000000003b5ca300000000000000043173",
     "frame_len": 73,
-    "crc_sent": "0x3173",
-    "crc_calc": "0x7331",
-    "crc_valid": true,
-    "expected": {
+    "old_app_log": {
       "battery_percentage": 17,
       "battery_voltage": 11.5,
       "battery_current": 0.0,
@@ -356,34 +219,15 @@
       "power_generation_total": 3890339,
       "charging_status": 0
     },
-    "unmapped": {
-      "reg_0x010A_raw": 0,
-      "battery_voltage_min_today?": 11.3,
-      "battery_voltage_max_today?": 11.8,
-      "reg_0x010D_raw": 5653,
-      "reg_0x010E_raw": 0,
-      "power_consumption_today?": 0,
-      "reg_0x0115_raw": 1383,
-      "reg_0x0116_raw": 1491,
-      "reg_0x0117_raw": 997,
-      "total_charging_amp_hours?": 216897,
-      "reg_0x011C_0x011D_raw": 0,
-      "reg_0x011E_0x011F_raw": 0,
-      "fault_bits?": 4,
-      "trailing_byte": 4
-    },
-    "old_app_log_delta_s": 0.226351,
-    "agrees_with_old_app": true
+    "old_app_log_time": "2026-09-09T00:10:44",
+    "pair_skew_s": 0.226,
+    "note": "array dark; controller load terminals unused, so all load/discharge fields are a legitimate zero"
   },
   {
-    "capture_offset_s": 271.508039,
-    "wall_clock": "2026-09-09T00:11:14.508039",
+    "wall_clock": "2026-09-09T00:11:14",
     "frame_hex": "ff0344000f00730000121800000000000000000000000000000071007616150000032200000091000007950000056705d303e500034f4100000000003b5ca30000000000000004af5a",
     "frame_len": 73,
-    "crc_sent": "0xaf5a",
-    "crc_calc": "0x5aaf",
-    "crc_valid": true,
-    "expected": {
+    "old_app_log": {
       "battery_percentage": 15,
       "battery_voltage": 11.5,
       "battery_current": 0.0,
@@ -403,34 +247,15 @@
       "power_generation_total": 3890339,
       "charging_status": 0
     },
-    "unmapped": {
-      "reg_0x010A_raw": 0,
-      "battery_voltage_min_today?": 11.3,
-      "battery_voltage_max_today?": 11.8,
-      "reg_0x010D_raw": 5653,
-      "reg_0x010E_raw": 0,
-      "power_consumption_today?": 0,
-      "reg_0x0115_raw": 1383,
-      "reg_0x0116_raw": 1491,
-      "reg_0x0117_raw": 997,
-      "total_charging_amp_hours?": 216897,
-      "reg_0x011C_0x011D_raw": 0,
-      "reg_0x011E_0x011F_raw": 0,
-      "fault_bits?": 4,
-      "trailing_byte": 4
-    },
-    "old_app_log_delta_s": 0.508039,
-    "agrees_with_old_app": true
+    "old_app_log_time": "2026-09-09T00:11:14",
+    "pair_skew_s": 0.508,
+    "note": "array dark; controller load terminals unused, so all load/discharge fields are a legitimate zero"
   },
   {
-    "capture_offset_s": 301.789753,
-    "wall_clock": "2026-09-09T00:11:44.789753",
+    "wall_clock": "2026-09-09T00:11:44",
     "frame_hex": "ff0344001100730000121700000000000000000000000000000071007616150000032200000091000007950000056705d303e500034f4100000000003b5ca300000000000000042576",
     "frame_len": 73,
-    "crc_sent": "0x2576",
-    "crc_calc": "0x7625",
-    "crc_valid": true,
-    "expected": {
+    "old_app_log": {
       "battery_percentage": 17,
       "battery_voltage": 11.5,
       "battery_current": 0.0,
@@ -450,34 +275,15 @@
       "power_generation_total": 3890339,
       "charging_status": 0
     },
-    "unmapped": {
-      "reg_0x010A_raw": 0,
-      "battery_voltage_min_today?": 11.3,
-      "battery_voltage_max_today?": 11.8,
-      "reg_0x010D_raw": 5653,
-      "reg_0x010E_raw": 0,
-      "power_consumption_today?": 0,
-      "reg_0x0115_raw": 1383,
-      "reg_0x0116_raw": 1491,
-      "reg_0x0117_raw": 997,
-      "total_charging_amp_hours?": 216897,
-      "reg_0x011C_0x011D_raw": 0,
-      "reg_0x011E_0x011F_raw": 0,
-      "fault_bits?": 4,
-      "trailing_byte": 4
-    },
-    "old_app_log_delta_s": 0.789753,
-    "agrees_with_old_app": true
+    "old_app_log_time": "2026-09-09T00:11:44",
+    "pair_skew_s": 0.79,
+    "note": "array dark; controller load terminals unused, so all load/discharge fields are a legitimate zero"
   },
   {
-    "capture_offset_s": 332.090175,
-    "wall_clock": "2026-09-09T00:12:15.090175",
+    "wall_clock": "2026-09-09T00:12:15",
     "frame_hex": "ff0344001100730000121700000000000000000000000000000071007616150000032200000091000007950000056705d303e500034f4100000000003b5ca300000000000000042576",
     "frame_len": 73,
-    "crc_sent": "0x2576",
-    "crc_calc": "0x7625",
-    "crc_valid": true,
-    "expected": {
+    "old_app_log": {
       "battery_percentage": 17,
       "battery_voltage": 11.5,
       "battery_current": 0.0,
@@ -497,23 +303,8 @@
       "power_generation_total": 3890339,
       "charging_status": 0
     },
-    "unmapped": {
-      "reg_0x010A_raw": 0,
-      "battery_voltage_min_today?": 11.3,
-      "battery_voltage_max_today?": 11.8,
-      "reg_0x010D_raw": 5653,
-      "reg_0x010E_raw": 0,
-      "power_consumption_today?": 0,
-      "reg_0x0115_raw": 1383,
-      "reg_0x0116_raw": 1491,
-      "reg_0x0117_raw": 997,
-      "total_charging_amp_hours?": 216897,
-      "reg_0x011C_0x011D_raw": 0,
-      "reg_0x011E_0x011F_raw": 0,
-      "fault_bits?": 4,
-      "trailing_byte": 4
-    },
-    "old_app_log_delta_s": 0.090175,
-    "agrees_with_old_app": true
+    "old_app_log_time": "2026-09-09T00:12:15",
+    "pair_skew_s": 0.09,
+    "note": "array dark; controller load terminals unused, so all load/discharge fields are a legitimate zero"
   }
 ]

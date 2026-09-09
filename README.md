@@ -118,22 +118,41 @@ is:
 | `probable` | not independently cross-checked, but triangulates against a confirmed field in a physically coherent way |
 | `unverified` | consistent with the published Renogy layout and with the captured bytes, but nothing yet rules out another reading |
 
-18 fields are `confirmed`, 3 `probable`, 10 `unverified`.
+18 fields are `confirmed`, 2 `probable`, 11 `unverified`.
 
 **Only `confirmed` and `probable` fields are exported by default.** Set
 `include_unverified = true` if you want the rest — but do not build an alarm on
 a hypothesis without checking it first.
 
-Two examples of what `probable` means in practice. `0x010B`/`0x010C` read 11.3
-and 11.8 V against a live reading of 11.5 V, which is what today's minimum and
-maximum should look like. `0x010D` reads 56.53 A, and the independently
-confirmed peak charging power of 802 W divided by it gives 14.19 V — a textbook
-absorption voltage. Neither is proof; both are better than a guess.
+Two captures anchor this so far: one at night with the array dark, one the
+next morning with it producing. The second one both **promoted and demoted**
+hypotheses, which is the point of recording confidence at all.
 
-`0x0121` sits immediately after the charging-state register and read `0x0004`
-throughout the capture. It is very likely fault/alarm bits, but there is no
-verified bit map, so it is exported raw and deliberately **not** decoded into
-named faults.
+**Promoted — `0x010B`/`0x010C`, today's minimum and maximum battery voltage.**
+Night showed 11.3 / 11.8 V bracketing a live 11.5 V. The next morning the pair
+had reset to that day's own figures, 9.8 / 12.5 V, still bracketing the live
+reading. Resetting overnight is exactly what a daily min/max must do, and the
+bracket has held on every frame of both captures. Still `probable` rather than
+`confirmed`, because `confirmed` here means cross-checked against another
+implementation's output and the predecessor never reported these fields.
+
+**Demoted — `0x010D`, which the night capture made look like today's peak
+charging current.** 802 W of confirmed peak charging power divided by 56.53 A
+gave 14.19 V, a textbook absorption voltage. It was a real relationship
+producing a correctly-shaped number, and it was wrong. The morning capture
+disconfirmed it three ways at once: the value did not reset overnight
+(5653 → 5616) while `charging_power_max_today` plainly did (802 → 691 W); a
+"peak today" of 56.16 A is inconsistent with the 22.76 A actually observed that
+morning; and the voltage ratio stopped landing anywhere sensible (12.30 V). It
+is now an unnamed raw register, with that history recorded in its `help` text
+so nobody re-derives the same wrong answer.
+
+**`0x0121` sits immediately after the charging-state register**, and the
+obvious guess was fault/alarm bits. Across 30 frames it instead tracks charging
+state exactly — state `0` → `4` on 11 of 11 frames, state `2` → `1` on 19 of 19,
+no exceptions. That is a companion status word, not an independent fault
+register. Only two charging states have been observed, so this is suggestive
+rather than settled. Exported raw, deliberately not decoded into named faults.
 
 ## Testing
 
@@ -143,26 +162,57 @@ pytest
 ```
 
 The suite needs no hardware. It runs against **real frames captured off the
-air** from a live BT-TH-F265000C, stored in `tests/fixtures/` alongside the
-values the previous implementation produced from those same frames at those
-same instants. Agreement across all mapped fields is the strongest check in the
-suite: it means this rewrite reproduces what was actually running in
-production, not merely that it is self-consistent.
+air** from a live BT-TH module.
+
+Each fixture entry holds two things that come from **different programs**:
+
+- `frame_hex` — the raw bytes the device put on the air, from a `btmon` capture
+- `old_app_log` — what the *previous* implementation reported for that same
+  instant, read straight out of its own log file
+
+`tools/extract_fixtures.py` builds these and deliberately **does not decode
+anything**, so the fixture cannot end up carrying the extractor's opinion of
+what the bytes mean. The test decodes `frame_hex` and asserts it matches
+`old_app_log`. Because the two sides come from different programs, that is a
+real cross-check rather than a decoder agreeing with itself.
+
+`tests/conftest.py` refuses to load a fixture that is not in this format, so a
+future well-meaning change to the extractor cannot quietly make the comparison
+circular again.
 
 The poll loop is tested too, through a replay transport that can be scripted to
 fail — connection failures, mid-run dropouts, corrupt frames, exploding sinks.
 
-### A known gap in the fixtures
+### What the fixtures do and do not cover
 
-The capture was taken at night, with the array dark and the controller's load
-terminals unused. Every PV, load and discharge field legitimately reads zero.
-That is coherent, but it means **those code paths are unexercised**: the fixture
-set proves the parser handles a dark system and proves nothing about a charging
-one, which is where a scaling or offset error would actually show.
+Two captures, 30 frames, 24 of them unique:
 
-A daylight capture is needed before the PV and charging-state paths can honestly
-be called confirmed. `tests/conftest.py` already has the hook for it, and tests
-that need it skip rather than pass while it is absent.
+| | frames | conditions |
+|---|---|---|
+| `night-2026-09-09` | 11 | array dark; every PV, load and discharge field a legitimate zero |
+| `day-2026-09-09` | 19 | overcast with variable cloud, array producing 180–270 W, charging in `mppt` |
+
+Together they give **540 field comparisons against the previous
+implementation, with no mismatches.**
+
+The daylight capture closed the gap that mattered: PV voltage, PV current, PV
+power, battery charging current and a non-zero `charging_state` were all
+structurally zero at night and so completely unexercised. `test_reading.py`
+asserts that coverage explicitly, so losing or replacing the daylight fixture
+with dark data fails the suite rather than quietly halving what it tests.
+
+Still not covered, and honestly:
+
+- **The top of the range.** The daylight capture was taken under overcast, not
+  at peak output. Scaling is linear and the largest raw value in play is
+  nowhere near a `u16` ceiling, so this is not a correctness risk — but nothing
+  here has seen a bright day.
+- **Everything load-side.** `load_voltage`, `load_current`, `load_power` and
+  every discharge counter read zero in both captures, because the controller
+  under test has nothing wired to its load terminals. Those offsets are taken
+  from the register layout and have never returned a non-zero value.
+- **Sub-zero temperatures.** The sign-bit convention is implemented from
+  documentation; no capture has been below freezing.
 
 ## Licence
 

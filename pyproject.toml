@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Sky Agnitti" }]
-keywords = ["renogy", "solar", "bluetooth", "ble", "prometheus", "influxdb", "modbus", "off-grid"]
+keywords = ["renogy", "solar", "bluetooth", "ble", "prometheus", "influxdb", "modbus"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: System Administrators",

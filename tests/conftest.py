@@ -37,7 +37,17 @@ def _load(name: str) -> list[dict]:
     path = FIXTURE_DIR / name
     if not path.exists():
         return []
-    return json.loads(path.read_text())
+    entries = json.loads(path.read_text())
+    for entry in entries:
+        # The fixture is only a cross-check while these two come from
+        # different programs: the frame from the air, the values from the
+        # previous implementation's log. Guard against a future extractor
+        # helpfully filling in decoded values instead.
+        assert "frame_hex" in entry and "old_app_log" in entry, (
+            f"{name} is not in the independent-cross-check format; "
+            f"regenerate it with tools/extract_fixtures.py"
+        )
+    return entries
 
 
 @pytest.fixture(scope="session")
