@@ -10,8 +10,12 @@ build/
 .mypy_cache/
 
 # Local configuration carries credentials and site detail. Only the
-# example is tracked.
+# example is tracked. The glob covers dated backups too: a rewrite of this
+# file leaves config.toml.bak-<stamp> beside it, carrying the same BLE
+# hardware address, and an untracked copy of it is one `git add -A` away
+# from the history. See PUBLISHING.md item 1.
 config.toml
+config.toml.bak-*
 /etc/
 *.local.toml
 
