@@ -113,6 +113,65 @@ async def test_a_device_recovers_after_transient_failures():
     assert len(sink.readings) >= 4
 
 
+class NeverReadsDevice(PollingDevice):
+    """Connects perfectly, then fails every read.
+
+    This is the shape that matters on real hardware and that no other fake
+    covers: BLE connects, the peripheral accepts, and then never answers a
+    characteristic read. open() succeeding is not evidence of progress.
+    """
+
+    fields = FIELDS
+
+    def __init__(self, name="answers-but-never-reads", **kwargs):
+        super().__init__(name, interval=0.01, **kwargs)
+        self.opens = self.closes = self.polls = 0
+
+    async def open(self):
+        self.opens += 1
+
+    async def close(self):
+        self.closes += 1
+
+    async def poll(self):
+        self.polls += 1
+        # This await is load-bearing for the TEST, not for the device. Without
+        # the fix, PollingDevice.run's retry loop contains no suspension point
+        # at all on this path, so it never yields to the event loop and the
+        # whole suite wedges instead of failing. Yielding here lets the test
+        # observe the spin and assert on it.
+        await asyncio.sleep(0)
+        raise DeviceError("connected, but the read never came back")
+
+
+async def test_a_device_that_connects_but_never_reads_does_not_spin():
+    """Regression: PollingDevice backed off on connect failure but not on read
+    failure, so a device that opened fine and failed every poll reconnected as
+    fast as the event loop allowed."""
+    device = NeverReadsDevice(backoff_initial=0.05, backoff_max=1.0)
+    sup = Supervisor([device], [RecordingSink()])
+    task = asyncio.create_task(sup.run())
+    try:
+        await asyncio.sleep(0.3)
+    finally:
+        sup.stop()
+        await task
+    assert device.opens <= 6, f"reconnected {device.opens}x in 0.3s - not backing off"
+
+
+async def test_backoff_escalates_while_reads_keep_failing():
+    """A successful open must not reset the backoff. Only a reading is progress."""
+    device = NeverReadsDevice(backoff_initial=0.02, backoff_max=1.0)
+    sup = Supervisor([device], [RecordingSink()])
+    task = asyncio.create_task(sup.run())
+    try:
+        await asyncio.sleep(0.3)
+    finally:
+        sup.stop()
+        await task
+    assert device._backoff > 0.02, "backoff never grew; it is being reset every cycle"
+
+
 async def test_open_failures_back_off_then_succeed():
     device = FakeDevice("slow-start", [12.8], fail_opens=3)
     sink = RecordingSink()
