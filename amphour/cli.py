@@ -58,19 +58,15 @@ def _list_drivers() -> int:
 
 
 def _list_fields(driver: str) -> int:
-    modules = {
-        "renogy_bt1": "amphour.drivers.renogy.registers",
-        "victron_vedirect": "amphour.drivers.victron_vedirect.fields",
-    }
-    if driver not in modules:
-        print(
-            f"unknown driver {driver!r}; available: {', '.join(drivers.available())}",
-            file=sys.stderr,
-        )
+    # The registry is the single source of what a driver reports. This used to
+    # keep its own driver -> module dict, which a third driver would have gone
+    # missing from with no error.
+    try:
+        fields = drivers.fields_for(driver)
+    except KeyError as exc:
+        # args[0], not str(exc): str() of a KeyError re-quotes the message.
+        print(exc.args[0], file=sys.stderr)
         return 2
-    import importlib
-
-    fields = importlib.import_module(modules[driver]).FIELDS
     width = max(len(f.name) for f in fields)
     print(f"{'field'.ljust(width)}  {'unit'.ljust(14)}  confidence")
     print(f"{'-' * width}  {'-' * 14}  ----------")

@@ -210,7 +210,7 @@ class VEDirectDevice(StreamingDevice):
                 yield self._build_reading()
 
 
-@register("victron_vedirect")
+@register("victron_vedirect", FIELDS)
 def _build(
     name: str,
     port: str,

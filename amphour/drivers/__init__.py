@@ -12,18 +12,43 @@ from collections.abc import Callable
 from typing import Any
 
 from ..device import Device
+from ..fields import Field
 
 _BUILDERS: dict[str, Callable[..., Device]] = {}
+_FIELDS: dict[str, tuple[Field, ...]] = {}
 
 
-def register(name: str) -> Callable[[Callable[..., Device]], Callable[..., Device]]:
+def register(
+    name: str, fields: tuple[Field, ...]
+) -> Callable[[Callable[..., Device]], Callable[..., Device]]:
+    """Register a driver builder AND what that driver can report.
+
+    The fields are registered here rather than looked up by the caller so that
+    there is exactly one place mapping a driver name to its field table. cli.py
+    used to keep its own driver -> module dict for --list-fields; a third
+    driver would have gone missing from it silently, which is the parallel-list
+    failure registers.py opens by warning about.
+    """
+
     def decorate(builder: Callable[..., Device]) -> Callable[..., Device]:
         if name in _BUILDERS:
             raise ValueError(f"driver {name!r} is already registered")
         _BUILDERS[name] = builder
+        _FIELDS[name] = fields
         return builder
 
     return decorate
+
+
+def fields_for(driver: str) -> tuple[Field, ...]:
+    """What `driver` can report. Raises KeyError naming the alternatives."""
+    _load_all()
+    try:
+        return _FIELDS[driver]
+    except KeyError:
+        raise KeyError(
+            f"unknown driver {driver!r}; available: {', '.join(sorted(_BUILDERS))}"
+        ) from None
 
 
 def available() -> tuple[str, ...]:

@@ -107,3 +107,31 @@ def test_tags_are_coerced_to_strings():
         {**MINIMAL, "influxdb": {"url": "http://db:8086", "database": "x", "tags": {"n": 1}}}
     )
     assert config.influxdb.tags == {"n": "1"}
+
+
+# --- driver registry --------------------------------------------------------
+
+
+def test_every_registered_driver_reports_its_fields():
+    """cli.py --list-fields used to keep its own driver -> module map. A driver
+    added without touching that map would have vanished from --list-fields with
+    no error, so the registry now carries the field table itself."""
+    from amphour import drivers
+
+    available = drivers.available()
+    assert available, "no drivers registered"
+    for name in available:
+        fields = drivers.fields_for(name)
+        assert fields, f"{name} registered no fields"
+        assert len({f.name for f in fields}) == len(fields), f"{name} has duplicate field names"
+
+
+def test_fields_for_an_unknown_driver_names_the_alternatives():
+    from amphour import drivers
+
+    with pytest.raises(KeyError) as caught:
+        drivers.fields_for("nonesuch")
+    message = caught.value.args[0]
+    assert "nonesuch" in message
+    for name in drivers.available():
+        assert name in message

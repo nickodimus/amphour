@@ -190,7 +190,7 @@ class RenogyBT1Device(PollingDevice):
             raise DeviceError(f"bad frame: {exc}") from exc
 
 
-@register("renogy_bt1")
+@register("renogy_bt1", FIELDS)
 def _build(
     name: str,
     address: str,
