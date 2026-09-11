@@ -254,6 +254,40 @@ async def test_a_streaming_device_that_produces_a_reading_resets_its_backoff():
     assert device._backoff == 0.02, "a reading arrived; the backoff should be back to initial"
 
 
+class QuietDevice(PollingDevice):
+    """Opens once, then waits. Used to observe teardown, not retry."""
+
+    fields = FIELDS
+
+    def __init__(self, name="quiet", **kwargs):
+        super().__init__(name, interval=60.0, **kwargs)
+        self.opens = self.closes = 0
+
+    async def open(self):
+        self.opens += 1
+
+    async def close(self):
+        self.closes += 1
+
+    async def poll(self):
+        await asyncio.sleep(30)
+        return Reading(source=self.name, values={"battery_voltage": 12.8})
+
+
+async def test_cancelling_closes_the_device_exactly_once():
+    """run() had both an `except CancelledError: close()` branch AND a
+    `finally: close()`. finally already runs before the exception leaves, so
+    every cancellation closed twice."""
+    device = QuietDevice()
+    sup = Supervisor([device], [RecordingSink()])
+    task = asyncio.create_task(sup.run())
+    await asyncio.sleep(0.05)
+    sup.stop()
+    await task
+    assert device.opens == 1
+    assert device.closes == 1, f"closed {device.closes}x for 1 open"
+
+
 async def test_open_failures_back_off_then_succeed():
     device = FakeDevice("slow-start", [12.8], fail_opens=3)
     sink = RecordingSink()

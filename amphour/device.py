@@ -121,10 +121,10 @@ class PollingDevice(_RetryingDevice):
             except DeviceError as exc:
                 self._note_failure()
                 log.warning("[%s] %s", self.name, exc)
-            except asyncio.CancelledError:
-                await self.close()
-                raise
             finally:
+                # No separate CancelledError branch: `finally` already runs
+                # before the exception leaves, so closing there too was simply
+                # closing twice.
                 await self.close()
             # EVERY failure path backs off before reconnecting, not just the
             # connect path. Without this, a device that opened fine and failed
@@ -174,9 +174,9 @@ class StreamingDevice(_RetryingDevice):
             except DeviceError as exc:
                 self._note_failure()
                 log.warning("[%s] %s", self.name, exc)
-            except asyncio.CancelledError:
-                await self.close()
-                raise
             finally:
+                # No separate CancelledError branch: `finally` already runs
+                # before the exception leaves, so closing there too was simply
+                # closing twice.
                 await self.close()
             await self._sleep_backoff()
