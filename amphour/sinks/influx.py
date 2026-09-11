@@ -70,17 +70,20 @@ class InfluxSink:
             # Basic auth, not the u=/p= query parameters: InfluxData's own docs
             # warn that query-string credentials land in server logs.
             self._session.auth = (username, password)
-        self._session.mount(
-            "http://",
-            HTTPAdapter(
-                max_retries=Retry(
-                    total=2,
-                    backoff_factor=0.5,
-                    status_forcelist=(500, 502, 503, 504),
-                    allowed_methods=frozenset(["POST"]),
-                )
-            ),
+        retrying = HTTPAdapter(
+            max_retries=Retry(
+                total=2,
+                backoff_factor=0.5,
+                status_forcelist=(500, 502, 503, 504),
+                allowed_methods=frozenset(["POST"]),
+            )
         )
+        # BOTH schemes. Mounting only http:// meant an https:// url quietly
+        # fell back to requests' default adapter and got no retries at all -
+        # a config change with no error and no log line, which is the shape
+        # this project keeps finding: a behaviour that silently is not there.
+        self._session.mount("http://", retrying)
+        self._session.mount("https://", retrying)
 
     def _params(self) -> dict[str, str]:
         params = {"db": self.database, "precision": "s"}
