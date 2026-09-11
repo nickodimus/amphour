@@ -135,3 +135,24 @@ def test_fields_for_an_unknown_driver_names_the_alternatives():
     assert "nonesuch" in message
     for name in drivers.available():
         assert name in message
+
+
+def test_the_example_config_actually_parses():
+    """config.example.toml is documentation that can rot silently. Parsing it
+    here means an option documented but not implemented - or implemented and
+    renamed - fails the suite instead of misleading whoever copies the file."""
+    import tomllib
+    from pathlib import Path
+
+    from amphour.config import from_dict
+
+    raw = tomllib.loads((Path(__file__).parent.parent / "config.example.toml").read_text())
+    config = from_dict(raw)
+    assert config.devices, "the example should configure at least one device"
+    assert {d.driver for d in config.devices} <= set(_available_drivers())
+
+
+def _available_drivers():
+    from amphour import drivers
+
+    return drivers.available()

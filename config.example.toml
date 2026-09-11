@@ -88,6 +88,13 @@ username = ""
 password = ""
 
 retention_policy = ""
+
+# Same meaning as the Prometheus option above, decided separately: hypothesis
+# fields are not written unless you ask. Kept independent on purpose - a
+# long-term store is where you WOULD want an unverified field recorded while
+# you decide what it means, even when you would not want it on a dashboard.
+include_unverified = false
+
 batch_size = 60
 flush_interval = 60.0
 timeout = 10.0
