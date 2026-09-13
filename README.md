@@ -1,9 +1,17 @@
 # amphour
 
-A monitor for DC power-system gear. It reads several devices at once, decodes
-them, and exports the readings to Prometheus and optionally InfluxDB.
+A monitor for DC power-system gear. It reads **Renogy** charge controllers over
+Bluetooth (BT-1 / BT-TH, Modbus RTU over a BLE GATT characteristic) and
+**Victron** devices over VE.Direct (SmartShunt, SmartSolar MPPT, and anything
+else with a VE.Direct port), decodes them, and exports the readings to
+**Prometheus** and optionally **InfluxDB**.
 
-Runs on Python 3.11+. No vendored libraries, no dead dependencies.
+It is a modern, maintained replacement for the ageing `gatt`-based
+`solar-bt-monitor` / renogy-bt lineage — see [Why this exists](#why-this-exists)
+for the specific bugs it fixes.
+
+Runs on Python 3.11+. No vendored libraries, no dead dependencies. Currently
+running in production against a Victron SmartShunt and a Renogy BT-TH.
 
 ## Drivers
 
@@ -250,12 +258,16 @@ structurally zero at night and so completely unexercised. `test_reading.py`
 asserts that coverage explicitly, so losing or replacing the daylight fixture
 with dark data fails the suite rather than quietly halving what it tests.
 
-Still not covered, and honestly:
+Still not covered by the automated suite, and honestly:
 
-- **No driver has completed a read from real hardware inside this program.**
-  The protocol layers are exercised against real bytes; the transports are not.
-  The BLE path in particular has never connected — the module stops advertising
-  while another client holds it, so it could not be reached from a second host.
+- **The tests never touch a live transport — production now does.** The protocol
+  layers are exercised against real captured bytes; the serial and BLE transports
+  are not covered by the suite. In the field, though, both drivers now read live
+  hardware continuously — a Victron SmartShunt over serial and a Renogy BT-TH
+  over BLE, feeding Prometheus and InfluxDB. The BLE connect needed a retry loop
+  to ride out BlueZ returning HCI `0x3e` ("connection failed to be established")
+  when the module's narrow advertising window is missed — common on a Raspberry
+  Pi's built-in Bluetooth radio.
 - **The top of the range.** The daylight capture was taken under overcast, not
   at peak output. Scaling is linear and the largest raw value in play is nowhere
   near a `u16` ceiling, so this is not a correctness risk — but nothing here has
