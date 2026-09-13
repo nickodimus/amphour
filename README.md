@@ -1,13 +1,14 @@
 # amphour
 
 A monitor for DC power-system gear. It reads **Renogy** charge controllers over
-Bluetooth (BT-1 / BT-TH, Modbus RTU over a BLE GATT characteristic) and
+Bluetooth (BT-1 / BT-TH, Modbus RTU over a BLE characteristic, via bleak) and
 **Victron** devices over VE.Direct (SmartShunt, SmartSolar MPPT, and anything
 else with a VE.Direct port), decodes them, and exports the readings to
 **Prometheus** and optionally **InfluxDB**.
 
-It is a modern, maintained replacement for the ageing `gatt`-based
-`solar-bt-monitor` / renogy-bt lineage — see [Why this exists](#why-this-exists)
+It is a modern, maintained replacement for the ageing `solar-bt-monitor` /
+renogy-bt lineage, which is built on the unmaintained `gatt` Python library —
+amphour talks BLE through **bleak** instead. See [Why this exists](#why-this-exists)
 for the specific bugs it fixes.
 
 Runs on Python 3.11+. No vendored libraries, no dead dependencies. Currently
@@ -17,7 +18,7 @@ running in production against a Victron SmartShunt and a Renogy BT-TH.
 
 | driver | speaks to | how |
 |---|---|---|
-| `renogy_bt1` | Renogy BT-1 / BT-TH module fronting a Renogy charge controller | Modbus RTU over a BLE GATT characteristic, polled |
+| `renogy_bt1` | Renogy BT-1 / BT-TH module fronting a Renogy charge controller | Modbus RTU over a BLE characteristic (via bleak), polled |
 | `victron_vedirect` | Victron SmartShunt, SmartSolar MPPT, and anything else with a VE.Direct port | plain-text serial, streamed |
 
 Drivers are in-repo and chosen by name in config. There is deliberately no
@@ -74,7 +75,7 @@ CRC16/MODBUS. The predecessor computed one for outbound requests and never
 verified the inbound one, so a corrupted frame was parsed as truth.
 
 **The wait moved out of the callback.** The predecessor called `time.sleep(30)`
-inside the BLE notification handler, blocking the GATT event loop for the whole
+inside the BLE notification handler, blocking the `gatt` library's event loop for the whole
 interval. Here the interval is an `await` in the poll loop and the callback only
 hands over bytes.
 
