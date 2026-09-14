@@ -9,11 +9,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from typing import Any
 
 from bleak import BleakClient, BleakScanner
 from bleak.args.bluez import BlueZClientArgs, BlueZScannerArgs
 from bleak.backends.device import BLEDevice
-from bleak.exc import BleakDeviceNotFoundError, BleakError
+from bleak.exc import BleakError
 
 from ...device import DeviceError, DeviceTimeout, PollingDevice
 from ...fields import Field
@@ -53,6 +54,8 @@ class RenogyBT1Device(PollingDevice):
         connect_timeout: float = 30.0,
         response_timeout: float = 10.0,
         scan_timeout: float = 15.0,
+        connect_attempts: int = 5,
+        connect_retry_delay: float = 2.0,
         backoff_initial: float = 5.0,
         backoff_max: float = 300.0,
     ) -> None:
@@ -68,6 +71,8 @@ class RenogyBT1Device(PollingDevice):
         self.connect_timeout = connect_timeout
         self.response_timeout = response_timeout
         self.scan_timeout = scan_timeout
+        self.connect_attempts = connect_attempts
+        self.connect_retry_delay = connect_retry_delay
 
         self._client: BleakClient | None = None
         self._buffer = bytearray()
@@ -95,44 +100,61 @@ class RenogyBT1Device(PollingDevice):
         client_args: BlueZClientArgs = {"adapter": self.adapter} if self.adapter else {}
         client = BleakClient(target, timeout=self.connect_timeout, bluez=client_args)
         await client.connect()
-        await client.start_notify(NOTIFY_CHAR_UUID, self._on_notify)
+        # If the link is up but subscribing fails, don't leave a half-open
+        # connection holding the single-client peripheral.
+        try:
+            await client.start_notify(NOTIFY_CHAR_UUID, self._on_notify)
+        except BleakError:
+            with contextlib.suppress(BleakError):
+                await client.disconnect()
+            raise
         return client
 
     async def open(self) -> None:
-        target: BLEDevice | str = self.address
-        if self.alias:
-            found = await self._scan()
-            if found is None:
-                raise DeviceError(f"no device advertising alias {self.alias!r}")
-            target = found
+        # Discover before every connect, rather than handing BleakClient a bare
+        # address. Connecting to an address BlueZ has not freshly seen advertise
+        # aborts the link on some stacks - BlueZ 5.55 raises "Software caused
+        # connection abort" - and a scanned BLEDevice also carries the correct
+        # (often random) address type. The reference gatt driver scans before
+        # each connect for the same reason. open() runs afresh on every retry,
+        # so this also rescans between attempts instead of repeating a failing
+        # cold connect.
+        found = await self._scan()
+        if found is None:
+            what = f"alias {self.alias!r}" if self.alias else self.address
+            raise DeviceError(
+                f"{what} not found by scan. It may be out of range, powered "
+                f"down, or already connected to another client - a BLE "
+                f"peripheral stops advertising while a central holds it"
+            )
 
-        client: BleakClient | None = None
-        try:
+        # The module advertises intermittently, so a single LE connect often
+        # misses its connectable window and the controller returns HCI 0x3e
+        # ("connection failed to be established"). Retry quickly to catch a
+        # window - the reference gatt driver succeeds the same way, by
+        # reconnecting rather than tuning the handshake - before falling back to
+        # the poll loop's slower backoff-with-rescan.
+        last_exc: BleakError | None = None
+        for attempt in range(1, self.connect_attempts + 1):
             try:
-                client = await self._open_client(target)
-            except BleakDeviceNotFoundError:
-                if self.alias:
-                    raise
-                # BlueZ will not connect to an address it has never seen
-                # advertise. Scan to populate its cache, then use the
-                # discovered BLEDevice directly.
-                log.info("[%s] %s unknown to BlueZ; scanning", self.name, self.address)
-                found = await self._scan()
-                if found is None:
-                    raise DeviceError(
-                        f"{self.address} not found by scan. It may be out of range, "
-                        f"powered down, or already connected to another client - a "
-                        f"BLE peripheral stops advertising while a central holds it"
-                    ) from None
-                client = await self._open_client(found)
-        except BleakError as exc:
-            if client is not None:
-                with contextlib.suppress(BleakError):
-                    await client.disconnect()
-            raise DeviceError(f"connect failed: {exc}") from exc
+                self._client = await self._open_client(found)
+                log.info("[%s] connected to %s", self.name, self.address)
+                return
+            except BleakError as exc:
+                last_exc = exc
+                log.info(
+                    "[%s] connect attempt %d/%d failed: %s",
+                    self.name,
+                    attempt,
+                    self.connect_attempts,
+                    exc,
+                )
+                if attempt < self.connect_attempts:
+                    await asyncio.sleep(self.connect_retry_delay)
 
-        self._client = client
-        log.info("[%s] connected to %s", self.name, self.address)
+        raise DeviceError(
+            f"connect failed after {self.connect_attempts} attempts: {last_exc}"
+        )
 
     async def close(self) -> None:
         client, self._client = self._client, None
@@ -197,6 +219,6 @@ def _build(
     alias: str | None = None,
     adapter: str | None = None,
     interval: float = 30.0,
-    **kwargs: float,
+    **kwargs: Any,
 ) -> RenogyBT1Device:
     return RenogyBT1Device(name, address, alias=alias, adapter=adapter, interval=interval, **kwargs)
