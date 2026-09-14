@@ -43,6 +43,17 @@ def test_scaled_values_are_not_polluted_by_float_error(night_capture):
     assert str(reading.values["battery_voltage"]) == "11.5"
 
 
+def test_every_value_is_a_float_not_an_int(all_frames):
+    """Scale-1 registers used to come out as bare ints. The InfluxDB line
+    protocol types those as integer fields, while the VE.Direct driver emits
+    floats under the same names, and Influx rejects the second type it sees
+    for a field until the shard rolls. A dict[str, float] must mean it."""
+    for entry in all_frames:
+        reading = decode(bytes.fromhex(entry["frame_hex"]))
+        for name, value in reading.values.items():
+            assert type(value) is float, f"{name} is {type(value).__name__}"
+
+
 def test_charging_state_maps_to_a_name(night_capture):
     reading = decode(bytes.fromhex(night_capture[0]["frame_hex"]))
     assert reading.text["charging_state"] == "deactivated"

@@ -27,7 +27,13 @@ def _value(frame: bytes, r: Register) -> float:
         raise ValueError(f"unhandled register kind {r.kind!r} for {r.name}")
 
     if r.scale == 1:
-        return raw
+        # float(), not the bare int. Reading.values promises floats, and the
+        # InfluxDB line protocol types a Python int as an INTEGER field. The
+        # shunt driver scales the same field names to float, and Influx holds
+        # one type per field per shard: whichever device wrote first after a
+        # shard rolled over won, and the other's points were rejected with a
+        # type conflict for the rest of the week (2026-09-13, shard 860).
+        return float(raw)
     # 0.1 and 0.01 scaling on ints reintroduces binary float noise
     # (115 * 0.1 -> 11.500000000000002); round to the scale's own precision.
     digits = 1 if r.scale == 0.1 else 2 if r.scale == 0.01 else 6
