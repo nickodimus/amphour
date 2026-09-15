@@ -1,0 +1,30 @@
+# EG4 LifePower4 V2 — example device blocks for amphour's config.toml.
+# SCAFFOLD: unverified until a live capture (see registers.py). Add
+# `include_unverified = true` under [prometheus]/[influxdb] to watch the raw
+# fields while you confirm them against the EG4 app / BMS_Tools; do not alarm
+# on an unverified field.
+#
+# Bus: RS485 on the battery RJ45, pins 1(B)/2(A), 9600 8N1. Each pack answers on
+# its DIP-switch Modbus address. Use the by-id serial path so a USB re-enumerate
+# does not move the port out from under the service (lesson from the shunt).
+#
+# TWO PACKS ONE BUS: two [[device]] blocks on the SAME port will fight over the
+# fd (see the driver docstring). Until the driver learns to poll multiple
+# addresses on one port, run one USB-RS485 adapter per pack, or wire one adapter
+# and comment out the second block while you bring the first up.
+
+[[device]]
+name = "eg4-1"
+driver = "eg4_lifepower4"
+port = "/dev/serial/by-id/usb-XXXX-RS485-if00-port0"   # <- your adapter's by-id path
+address = 1
+baud = 9600
+interval = 30.0
+
+# [[device]]
+# name = "eg4-2"
+# driver = "eg4_lifepower4"
+# port = "/dev/serial/by-id/usb-YYYY-RS485-if00-port0"  # 2nd adapter, or shared once supported
+# address = 2
+# baud = 9600
+# interval = 30.0
