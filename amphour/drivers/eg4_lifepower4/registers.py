@@ -72,6 +72,9 @@ REGISTERS: Final[tuple[Register, ...]] = (
     Register("battery_temperature_ambient", 41, "s16", 1.0,
              Field("battery_temperature_ambient", "celsius", "confirmed",
                    "Ambient temperature at the pack (reg 0x0013)")),
+    Register("battery_temperature_cell", 43, "s16", 1.0,
+             Field("battery_temperature_cell", "celsius", "confirmed",
+                   "Cell-group temperature at the pack (reg 0x0014)")),
 )
 
 # --- cell block (derived in decode.py) ------------------------------------
@@ -80,6 +83,14 @@ REGISTERS: Final[tuple[Register, ...]] = (
 CELL_START: Final = 7            # byte offset of register 0x0002
 CELL_COUNT: Final = 16
 CELL_SCALE: Final = 0.001        # mV -> V
+
+# Per-cell fields, emitted individually from the cell block in decode.py (so the
+# wall can draw a 16-bar cell chart, the way the EG4 app shows it) alongside the
+# min/max/delta summary below. Zero-padded so cell_voltage_01..16 sort in order.
+CELL_FIELDS: Final[tuple[Field, ...]] = tuple(
+    Field(f"cell_voltage_{i:02d}", "volts", "confirmed", f"Series cell {i} voltage")
+    for i in range(1, CELL_COUNT + 1)
+)
 
 # --- pack temperatures (derived) ------------------------------------------
 # Three cell-group temperatures at registers 0x0012..0x0014 (PCB, ambient, cell),
@@ -99,4 +110,6 @@ DERIVED_FIELDS: Final[tuple[Field, ...]] = (
 )
 
 # The full field tuple the driver declares (registry + sinks read this).
-FIELDS: Final[tuple[Field, ...]] = tuple(r.field for r in REGISTERS) + DERIVED_FIELDS
+FIELDS: Final[tuple[Field, ...]] = (
+    tuple(r.field for r in REGISTERS) + CELL_FIELDS + DERIVED_FIELDS
+)
