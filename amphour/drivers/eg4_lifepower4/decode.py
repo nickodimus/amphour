@@ -56,6 +56,8 @@ def decode(frame: bytes, *, address: int, source: str = "eg4", verify: bool = Tr
     values: dict[str, float] = {r.name: _scalar(frame, r) for r in REGISTERS}
 
     cells = _cells(frame)
+    for i, cell in enumerate(cells, start=1):
+        values[f"cell_voltage_{i:02d}"] = cell
     values["cell_voltage_min"] = min(cells)
     values["cell_voltage_max"] = max(cells)
     values["cell_voltage_delta"] = round(max(cells) - min(cells), 3)

@@ -78,8 +78,14 @@ def test_decode_master_matches_bms_tools():
     assert v["cell_voltage_delta"] == 0.003
     assert v["battery_temperature_pcb"] == 23.0
     assert v["battery_temperature_ambient"] == 23.0
+    assert v["battery_temperature_cell"] == 21.0
     assert v["battery_temperature"] == 23.0        # warmest of the three
     assert v["battery_temperature_min"] == 21.0
+    # per-cell fields, emitted individually as well as summarised
+    assert v["cell_voltage_01"] == 3.331
+    assert v["cell_voltage_02"] == 3.334
+    assert v["cell_voltage_16"] == 3.333
+    assert sum(1 for k in v if k.startswith("cell_voltage_") and k[-2:].isdigit()) == 16
 
 
 def test_decode_reports_all_declared_fields():
