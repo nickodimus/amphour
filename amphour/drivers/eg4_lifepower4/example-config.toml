@@ -1,0 +1,33 @@
+# EG4 LifePower4 V2 — example device block for amphour's config.toml.
+#
+# VERIFIED against Sky's two-pack bank 2026-09-22. The V2 speaks standard Modbus
+# RTU (FC 0x03) at 9600 8N1 on the battery's RS485 port (RJ45 pins 1-B, 2-A).
+#
+# TWO PACKS, ONE CABLE. Both packs share the single RS485 monitor line: the
+# master answers at address 64 directly, a chained slave at address 63 via the
+# master relaying over the battery-comm link. So ONE [[device]] on ONE port lists
+# BOTH packs under `packs` — the driver polls each and reports it under its own
+# `device=` label (`eg4-master`, `eg4-slave`). Do NOT write two [[device]] blocks
+# on the same port; they would fight over the serial fd.
+#
+# Use the by-id serial path so a USB re-enumerate doesn't move the port out from
+# under the service (lesson from the shunt — it hops ttyUSB0<->ttyUSB1).
+
+[[device]]
+name = "eg4"
+driver = "eg4_lifepower4"
+port = "/dev/serial/by-id/usb-XXXX-RS485-if00-port0"   # <- your adapter's by-id path
+baud = 9600
+interval = 30.0
+response_timeout = 1.5        # generous, so the slower slave-relay reply lands
+packs = [
+    { address = 64, label = "master" },
+    { address = 63, label = "slave" },
+]
+
+# Single pack (e.g. an isolated pack on the bench) instead of the `packs` list:
+# [[device]]
+# name = "eg4"
+# driver = "eg4_lifepower4"
+# port = "/dev/serial/by-id/usb-XXXX-RS485-if00-port0"
+# address = 64
