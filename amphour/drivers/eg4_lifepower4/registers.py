@@ -52,7 +52,7 @@ REGISTERS: Final[tuple[Register, ...]] = (
              Field("battery_voltage", "volts", "confirmed",
                    "Pack terminal voltage reported by the EG4 BMS (reg 0x0000)")),
     Register("battery_current", 5, "s16", 0.01,
-             Field("battery_current", "amps", "confirmed",
+             Field("battery_current", "amperes", "confirmed",
                    "Pack current, + charging / - discharging, from the BMS (reg 0x0001)")),
     Register("battery_state_of_charge", 45, "u16", 1.0,
              Field("battery_state_of_charge", "percent", "confirmed",
