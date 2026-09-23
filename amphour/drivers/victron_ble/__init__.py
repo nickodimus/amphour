@@ -32,6 +32,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import re
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -46,6 +47,8 @@ from .decode import decode_battery_monitor
 from .records import FIELDS
 
 log = logging.getLogger(__name__)
+
+_MAC = re.compile(r"^[0-9A-F]{2}(:[0-9A-F]{2}){5}$")
 
 
 class VictronBLEDevice(StreamingDevice):
@@ -66,6 +69,15 @@ class VictronBLEDevice(StreamingDevice):
     ) -> None:
         super().__init__(name, backoff_initial=backoff_initial, backoff_max=backoff_max)
         self.address = address.upper()
+        if not _MAC.match(self.address):
+            # Checked here so a typo fails at startup. Left unchecked, the
+            # address simply never matches an advertisement and the device
+            # reports "no advertisement in Ns - out of range, powered down, or
+            # Instant Readout turned off" forever: a config error wearing a
+            # radio error's clothes, which sends you outside with a laptop.
+            raise DeviceError(
+                f"{address!r} is not a BLE MAC address (expected AA:BB:CC:DD:EE:FF)"
+            )
         self.adapter = adapter
         self.stale_after = stale_after
         try:

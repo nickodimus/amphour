@@ -148,3 +148,15 @@ def test_a_key_that_is_not_hex_is_rejected_at_build_time():
     with pytest.raises(DeviceError):
         build("victron_ble", name="shunt", address="AA:BB:CC:DD:EE:FF",
               encryption_key="not a key")
+
+
+def test_a_malformed_address_fails_at_startup_not_as_a_phantom_range_problem():
+    """An unvalidated address never matches an advertisement, so the device
+    reports a staleness timeout forever — a config typo that reads exactly like
+    being out of radio range. Found by the Amphour4 bay hitting the same shape
+    in its own driver."""
+    from amphour.device import DeviceError
+
+    for bad in ("E0:A4:97:AE:64", "not-a-mac", "E0-A4-97-AE-64-FC", ""):
+        with pytest.raises(DeviceError):
+            build("victron_ble", name="shunt", address=bad, encryption_key=TEST_KEY.hex())
