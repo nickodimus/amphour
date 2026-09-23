@@ -1,0 +1,56 @@
+[
+  {
+    "mac": "C7:BB:BC:8D:70:3E",
+    "mfr_id": 89,
+    "data_hex": "0c6137f7c18d703efd15",
+    "kind": "studio"
+  },
+  {
+    "mac": "C7:BB:BC:8D:70:3E",
+    "mfr_id": 89,
+    "data_hex": "0c6137f7c18d703efe16",
+    "kind": "studio"
+  },
+  {
+    "mac": "F1:AE:79:54:4B:26",
+    "mfr_id": 89,
+    "data_hex": "0c73370000544b26274d",
+    "kind": "retired"
+  },
+  {
+    "mac": "C7:BB:BC:8D:70:3E",
+    "mfr_id": 89,
+    "data_hex": "0c6137f7c18d703eff16",
+    "kind": "studio"
+  },
+  {
+    "mac": "F1:AE:79:54:4B:26",
+    "mfr_id": 89,
+    "data_hex": "0c73370000544b26264d",
+    "kind": "retired"
+  },
+  {
+    "mac": "C7:BB:BC:8D:70:3E",
+    "mfr_id": 89,
+    "data_hex": "0c6137f7c18d703efe15",
+    "kind": "studio"
+  },
+  {
+    "mac": "F1:AE:79:54:4B:26",
+    "mfr_id": 89,
+    "data_hex": "0c73370000544b26274c",
+    "kind": "retired"
+  },
+  {
+    "mac": "C7:BB:BC:8D:70:3E",
+    "mfr_id": 89,
+    "data_hex": "0c6137f7c18d703eff15",
+    "kind": "studio"
+  },
+  {
+    "mac": "C7:BB:BC:8D:70:3E",
+    "mfr_id": 89,
+    "data_hex": "0c6137f7c18d703efe14",
+    "kind": "studio"
+  }
+]
