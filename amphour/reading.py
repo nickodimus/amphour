@@ -33,10 +33,20 @@ class Reading:
             ("battery_state_of_charge", "{:.0f}%"),
             ("pv_power", "pv={:.0f}W"),
             ("battery_current", "{:+.2f}A"),
+            ("tank_level", "tank={:.0f}%"),
         ):
             if key in self.values:
                 parts.append(fmt.format(self.values[key]))
         state = self.text.get("charging_state") or self.text.get("alarm")
         if state:
             parts.append(f"[{state}]")
-        return f"{self.source}: " + " ".join(parts) if parts else f"{self.source}: (no values)"
+        if parts:
+            return f"{self.source}: " + " ".join(parts)
+        if self.values:
+            # Values this summary has no shorthand for. It used to say "(no
+            # values)" here, which is a different claim entirely: a healthy
+            # propane gauge reporting seven fields logged every minute as if
+            # its device were dead, and the guard snapshot greps these lines.
+            # A driver must not have to edit this list to avoid looking broken.
+            return f"{self.source}: {len(self.values)} values"
+        return f"{self.source}: (no values)"

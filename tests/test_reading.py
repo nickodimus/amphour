@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from amphour.drivers.renogy import decode, protocol
+from amphour.reading import Reading
 from tests.conftest import OLD_TO_NEW
 
 
@@ -157,3 +158,16 @@ def test_pv_power_tracks_pv_voltage_times_current(day_capture):
             f"{entry['wall_clock']}: {v['pv_voltage']}V * {v['pv_current']}A "
             f"= {implied:.1f} but pv_power reports {v['pv_power']}"
         )
+
+
+def test_a_propane_reading_summarises_as_its_tank_level():
+    r = Reading(source="studio_propane", values={"tank_level": 76.0, "sensor_temperature": 14.0})
+    assert str(r) == "studio_propane: tank=76%"
+
+
+def test_unsummarised_values_do_not_claim_the_device_reported_nothing():
+    # The distinction matters: "(no values)" is a fault, "3 values" is a
+    # reading this one-line summary has no shorthand for.
+    r = Reading(source="odd", values={"a": 1.0, "b": 2.0, "c": 3.0})
+    assert str(r) == "odd: 3 values"
+    assert str(Reading(source="dead")) == "dead: (no values)"
