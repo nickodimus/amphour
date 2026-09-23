@@ -46,6 +46,15 @@ class Supervisor:
             await device.run(self._emit)
         except asyncio.CancelledError:
             raise
+        except Exception:
+            # A driver raising something its own retry loop does not recognise
+            # used to propagate through the TaskGroup and end the process, so a
+            # single malformed frame on one device silenced every other device
+            # too. Independence is the whole reason this supervisor exists: the
+            # failing device stops and says so loudly, the rest keep reporting.
+            log.exception(
+                "[%s] driver raised; this device has STOPPED, others continue", device.name
+            )
         else:
             log.error("[%s] run() returned; a driver should run until cancelled", device.name)
 

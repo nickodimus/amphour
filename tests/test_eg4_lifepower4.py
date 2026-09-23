@@ -126,3 +126,46 @@ def test_build_makes_a_two_pack_device():
         packs=[{"address": 64, "label": "master"}, {"address": 63, "label": "slave"}],
     )
     assert [(p.address, p.label) for p in d.packs] == [(64, "master"), (63, "slave")]
+
+
+async def test_a_malformed_reply_is_a_device_error_not_a_process_kill(monkeypatch):
+    """A bad frame must surface as DeviceError so run()'s per-pack handler logs
+    it and carries on. Raised bare, ProtocolError escaped the TaskGroup and
+    ended the process — 11 times on 2026-09-22, taking two healthy devices with
+    it each time."""
+    import asyncio
+    import os
+
+    from amphour.drivers import eg4_lifepower4 as driver
+    from amphour.drivers.eg4_lifepower4 import protocol
+
+    device = build(
+        "eg4_lifepower4", name="eg4", port="/dev/null",
+        packs=[{"address": 64, "label": "master"}],
+    )
+    read_fd, write_fd = os.pipe()
+    try:
+        device._fd = write_fd
+
+        def boom(*_a, **_k):
+            raise protocol.UnexpectedResponseError("byte count 100 does not match 25 words")
+
+        monkeypatch.setattr(driver, "decode", boom)
+
+        async def feed():
+            # let _poll_pack clear the buffer and write its request first
+            await asyncio.sleep(0.01)
+            device._buf.extend(b"\x00" * protocol.EXPECTED_FRAME_LEN)
+            device._wake.set()
+
+        feeder = asyncio.create_task(feed())
+        with pytest.raises(DeviceError) as caught:
+            await device._poll_pack(device.packs[0])
+        await feeder
+
+        assert "master" in str(caught.value)
+        assert "byte count 100" in str(caught.value)
+        assert not isinstance(caught.value, protocol.ProtocolError)
+    finally:
+        os.close(read_fd)
+        os.close(write_fd)

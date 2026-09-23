@@ -326,3 +326,33 @@ async def test_scales_to_several_devices(count):
     sup = Supervisor(devices, [sink])
     await run_until(sup, lambda: len({r.source for r in sink.readings}) == count)
     assert len({r.source for r in sink.readings}) == count
+
+
+class ExplodingDevice(FakeDevice):
+    """Raises something its own retry loop does not recognise.
+
+    PollingDevice.run() retries on DeviceError only, so anything else escapes
+    run() entirely — which is exactly what a driver-level protocol error did.
+    """
+
+    async def poll(self):
+        self.polls += 1
+        raise ValueError("a driver bug that is not a DeviceError")
+
+
+async def test_a_driver_raising_does_not_take_down_the_other_devices():
+    """The EG4 driver killed the whole process on 2026-09-22 by raising a
+    ProtocolError out of run(): it crossed the TaskGroup and stopped the shunt
+    and the charge controller too. Independence is the supervisor's entire job."""
+    exploding = ExplodingDevice("exploding", [1.0])
+    healthy = FakeDevice("healthy", [12.0])
+    sink = RecordingSink()
+    sup = Supervisor([exploding, healthy], [sink])
+
+    await run_until(sup, lambda: len([r for r in sink.readings if r.source == "healthy"]) >= 3)
+
+    assert exploding.polls >= 1, "the exploding device should have been polled"
+    assert len([r for r in sink.readings if r.source == "healthy"]) >= 3, (
+        "the healthy device must keep reporting after the other one dies"
+    )
+    assert not any(r.source == "exploding" for r in sink.readings)

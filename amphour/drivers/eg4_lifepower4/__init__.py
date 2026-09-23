@@ -156,7 +156,18 @@ class EG4LifePower4Device(PollingDevice):
             ) from exc
 
         frame = bytes(self._buf[:want])
-        return decode(frame, address=pack.address, source=f"{self.name}-{pack.label}")
+        try:
+            return decode(frame, address=pack.address, source=f"{self.name}-{pack.label}")
+        except protocol.ProtocolError as exc:
+            # A malformed reply is a bad read, not a broken program. Two packs
+            # share one half-duplex line and a late reply can land in the next
+            # pack's window, so this happens in the field. Raised as DeviceError
+            # it becomes the per-pack "carry on" path in run(); raised as a bare
+            # ProtocolError it escaped the TaskGroup and killed the process,
+            # taking the shunt and the charge controller down with it (11 times
+            # on 2026-09-22 before anyone noticed, because systemd restarted it
+            # and every health check still said "active").
+            raise DeviceError(f"{pack.label} (addr {pack.address}): {exc}") from exc
 
     async def poll(self) -> Reading:
         # Satisfies PollingDevice's contract (a single reading); run() below is
