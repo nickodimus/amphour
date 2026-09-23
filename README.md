@@ -3,8 +3,9 @@
 A monitor for DC power-system gear. It reads **Renogy** charge controllers over
 Bluetooth (BT-1 / BT-TH, Modbus RTU over a BLE characteristic, via bleak) and
 **Victron** devices over VE.Direct (SmartShunt, SmartSolar MPPT, and anything
-else with a VE.Direct port), decodes them, and exports the readings to
-**Prometheus** and optionally **InfluxDB**.
+else with a VE.Direct port), and **Mopeka** propane tank pucks over BLE
+advertisements, decodes them, and exports the readings to **Prometheus** and
+optionally **InfluxDB**.
 
 It is a modern, maintained replacement for the ageing `solar-bt-monitor` /
 renogy-bt lineage, which is built on the unmaintained `gatt` Python library —
@@ -20,6 +21,7 @@ running in production against a Victron SmartShunt and a Renogy BT-TH.
 |---|---|---|
 | `renogy_bt1` | Renogy BT-1 / BT-TH module fronting a Renogy charge controller | Modbus RTU over a BLE characteristic (via bleak), polled |
 | `victron_vedirect` | Victron SmartShunt, SmartSolar MPPT, and anything else with a VE.Direct port | plain-text serial, streamed |
+| `mopeka_ble` | Mopeka Pro Check tank-level puck (propane) | BLE advertisements, listened for — never connected to |
 
 Drivers are in-repo and chosen by name in config. There is deliberately no
 entry-point discovery or dynamic third-party loading: that machinery earns its
@@ -29,6 +31,31 @@ nothing when every driver lives in this tree.
 Each device runs as its own task, so one failing and retrying never stalls
 another — a BLE module that has wandered off must not hold up a serial shunt
 that is working perfectly.
+
+### Listening, not connecting
+
+The Mopeka driver never opens a BLE connection. The puck broadcasts its reading
+in the advertisement itself, so amphour only listens — which means it cannot
+lock the device out, and staleness shows up directly as silence.
+
+That also means every Mopeka puck in radio range is talking at once, under one
+manufacturer id. **`address` is a filter, not a convenience.** A puck retired
+with a dead ultrasonic transducer keeps advertising a perfectly well formed
+reading of zero, and may well be louder at the collector than the tank you care
+about. Matching on manufacturer id alone would quietly monitor the wrong tank.
+
+A reading whose signal quality is below `min_quality` publishes **no level at
+all** — not a zero, not a NaN. Temperature, battery and quality keep publishing,
+so a puck that cannot see the liquid surface stays visibly alive rather than
+drawing an empty tank. (NaN in particular is load-bearing: InfluxDB rejects a
+NaN point, and a rejected point can sit in a write buffer and poison later
+writes.)
+
+One more thing that is invisible from the code: **a puck this collector cannot
+hear is not a puck that has moved on.** Where two collectors each cover pucks
+the other cannot reach, that is radio geography, and the split is deliberate
+rather than a migration half-finished. If you find one, look for the note
+explaining it before tidying it away.
 
 ## One vocabulary across drivers
 

@@ -70,4 +70,10 @@ def build(driver: str, **kwargs: Any) -> Device:
 def _load_all() -> None:
     # Imported for their registration side effects. Kept in one place so a new
     # driver is added by editing exactly this list plus its own module.
-    from . import eg4_lifepower4, renogy, victron_ble, victron_vedirect  # noqa: F401
+    from . import (  # noqa: F401
+        eg4_lifepower4,
+        mopeka,
+        renogy,
+        victron_ble,
+        victron_vedirect,
+    )

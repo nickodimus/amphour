@@ -56,6 +56,35 @@ interval = 30.0
 # driver = "victron_vedirect"
 # port = "/dev/serial/by-id/usb-VictronEnergy_BV_VE_Direct_cable_XXXXXXXX-if00-port0"
 
+# A Mopeka Pro Check propane puck. This one is a BEACON: amphour never connects
+# to it, it only listens for the advertisement the puck broadcasts anyway.
+[[device]]
+name = "studio_propane"
+driver = "mopeka_ble"
+# BLE MAC of the puck. REQUIRED as a filter, not as a convenience: every Mopeka
+# puck in radio range advertises under the same manufacturer id, including any
+# retired one still sitting in a shed with a live battery, and a retired puck
+# broadcasts a perfectly well formed reading of zero.
+address = "AA:BB:CC:DD:EE:FF"
+# Tank geometry. Known: 20LB_V, 30LB_V, 40LB_V, EUROPE_6KG, EUROPE_11KG,
+# EUROPE_14KG. The puck measures DISTANCE; the percentage is that distance
+# interpreted through this geometry, so getting it wrong silently rescales
+# every reading. For a tank not listed, give empty_mm and full_mm together.
+tank_type = "20LB_V"
+# empty_mm = 38
+# full_mm = 254
+# adapter = "hci0"
+# How often a reading is published. The puck advertises every few seconds;
+# this throttles what gets stored. Propane moves slowly, so it can be long.
+interval = 60.0
+# Lowest read quality (zero, low, medium, high) whose level is trusted. Below
+# it the level and distance are OMITTED from the reading - not zeroed, not
+# NaN - while temperature, battery and quality keep publishing, so a puck that
+# cannot see the liquid stays visibly alive instead of drawing an empty tank.
+# min_quality = "low"
+# Treat the puck as gone if this long passes with no advertisement at all.
+# stale_after = 300.0
+
 # --- sinks -----------------------------------------------------------------
 
 [prometheus]
