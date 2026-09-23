@@ -21,7 +21,7 @@ import pytest
 from bleak.exc import BleakError
 
 from amphour.device import DeviceError
-from amphour.drivers import build, fields_for
+from amphour.drivers import available, build, fields_for
 from amphour.drivers.mopeka import MopekaProCheckDevice
 from amphour.drivers.mopeka.decode import ProtocolError, decode
 from amphour.drivers.mopeka.fields import MANUFACTURER_ID
@@ -242,16 +242,28 @@ def test_driver_is_registered_and_builds():
 
 
 def test_registered_fields_use_existing_unit_vocabulary():
-    # A driver declaring "amperes" where another says "amps" makes the
-    # Prometheus sink warn on every start, because one metric cannot document
-    # two units. Every unit here must already be in use, or be genuinely new.
-    ours = {f.unit for f in fields_for("mopeka_ble")}
+    """This driver may introduce exactly one new unit string: millimeters.
+
+    Complements tests/test_field_vocabulary.py rather than duplicating it.
+    That one catches the SAME field name declared with two different units -
+    the `amps` vs `amperes` collision of 4d636f1. It cannot see a second
+    SPELLING arriving under a new name, because there is no conflict to find:
+    a driver adding `tank_distance` in "mm" while the vocabulary already says
+    "millimeters" passes it cleanly and leaves two words for one unit.
+
+    So this test watches the other direction - new vocabulary - and it is
+    deliberately narrow: only mopeka_ble, only one permitted addition. Adding
+    a unit string here should require editing this line and thinking about it.
+    """
     others = {
-        f.unit
-        for driver in ("renogy_bt1", "victron_vedirect", "eg4_lifepower4")
-        for f in fields_for(driver)
+        f.unit for driver in available() if driver != "mopeka_ble" for f in fields_for(driver)
     }
-    assert ours - others == {"millimeters"}, "unexpected new unit string"
+    ours = {f.unit for f in fields_for("mopeka_ble")}
+    assert ours - others == {"millimeters"}, (
+        "mopeka_ble introduced an unexpected new unit string; if that is "
+        "deliberate, say so here, and check no existing driver already has a "
+        "word for the same quantity"
+    )
 
 
 @pytest.mark.parametrize(
