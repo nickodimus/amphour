@@ -196,12 +196,19 @@ class VictronBLEDevice(StreamingDevice):
             # A Victron device advertises several times a second. Every one of
             # those is a complete snapshot, so the newest simply wins and the
             # rest are dropped - there is nothing to accumulate and nothing
-            # lost by skipping one. Unthrottled this emitted ~142 readings a
-            # minute against 2 from the same shunt read over its cable: 70x the
-            # InfluxDB volume for a value that moves slowly, and - the part
-            # that actually mattered - enough journal lines to push genuine
-            # WARNINGs out of the 24h window that overwatch's guard panel
-            # reads, blinding the one display whose job is to show a fault.
+            # lost by skipping one. Unthrottled this emitted 142-216 readings a
+            # minute against 2 from the same shunt read over its cable, and the
+            # rate climbed through the day rather than settling.
+            #
+            # The InfluxDB volume is the obvious cost and the smaller one. The
+            # real damage is to JOURNAL RETENTION: journald keeps a fixed
+            # number of BYTES, so a flood of INFO lines evicts older entries,
+            # and overwatch's guard panel asks for a 24 hour window to compute
+            # its event feed and its counts of influx failures, device retries
+            # and USB resets. Measured on tremelor under the flood, only 3.2
+            # hours survived - a fault from that morning was simply no longer
+            # in the data, and a monitor that quietly forgets is worse than one
+            # that is plainly down, because it is still trusted.
             if not self._due(asyncio.get_running_loop().time()):
                 continue
             yield reading
