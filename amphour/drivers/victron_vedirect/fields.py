@@ -248,8 +248,14 @@ LABELS: Final[tuple[Label, ...]] = (
     # come from the published VE.Direct protocol document and, unlike
     # everything above, have NOT been cross-checked against a second
     # implementation or a live unit. They therefore ship `unverified` and are
-    # not exported by default. Promote them once they have been read against
-    # VictronConnect on the real controller.
+    # not exported by default.
+    #
+    # That cross-check is BLOCKED, not skipped. As of 2026-09-23 the SmartSolar
+    # is not yet wired on the property and the single VE.Direct cable is still
+    # on the SmartShunt, so there is no controller to read these against. The
+    # moment one is on the cable, read it against VictronConnect and promote
+    # what matches - and treat what does NOT match as the more interesting
+    # result, because it means this table is wrong rather than merely unproven.
     #
     # Names are chosen to match what the Renogy charge controller already calls
     # the same physical quantity, so one query compares two controllers.
