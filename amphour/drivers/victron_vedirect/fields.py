@@ -250,16 +250,34 @@ LABELS: Final[tuple[Label, ...]] = (
     # implementation or a live unit. They therefore ship `unverified` and are
     # not exported by default.
     #
-    # That cross-check is BLOCKED, not skipped. As of 2026-09-23 the SmartSolar
-    # is not yet wired on the property and the single VE.Direct cable is still
-    # on the SmartShunt, so there is no controller to read these against. The
-    # moment one is on the cable, read it against VictronConnect and promote
-    # what matches - and treat what does NOT match as the more interesting
-    # result, because it means this table is wrong rather than merely unproven.
+    # PARTIALLY cross-checked on 2026-09-23 against a SmartSolar (PID 0xA073,
+    # firmware 159, serial HQ2505U2CUP) powered from the busbars with NO PANELS
+    # attached, read simultaneously in VictronConnect. The app and this decode
+    # agreed on PV voltage 0.02V, battery voltage 54.4V and state "Off".
+    #
+    # What that could and could not settle is the whole point of the split
+    # below. With no panels, pv_power and every yield counter read ZERO, and a
+    # zero validates nothing: a 0.001 scale and a 0.01 scale produce identical
+    # output on zero input. Those stay `unverified` until this controller has
+    # panels and has actually produced. pv_voltage is different - the floating
+    # panel input sat at 20mV, and a wrong scale would have shown 0.2V in one
+    # place and 0.02V in the other. It did not.
+    #
+    # This unit never sends LOAD or IL: it has no load output. Those labels are
+    # kept for controllers that do, and simply go unused here.
     #
     # Names are chosen to match what the Renogy charge controller already calls
     # the same physical quantity, so one query compares two controllers.
-    Label("VPV", "pv_voltage", "number", 0.001, "volts", "unverified", "Panel voltage"),
+    Label(
+        "VPV",
+        "pv_voltage",
+        "number",
+        0.001,
+        "volts",
+        "confirmed",
+        "Panel voltage. Scale cross-checked against VictronConnect at 0.02V on a "
+        "floating input, where a wrong scale would have disagreed by 10x",
+    ),
     Label("PPV", "pv_power", "number", 1, "watts", "unverified", "Panel power"),
     Label(
         "IL",
@@ -291,9 +309,12 @@ LABELS: Final[tuple[Label, ...]] = (
         "text",
         1,
         "state",
-        "unverified",
+        "probable",
         "Charger stage by name. Victron's own vocabulary, which does NOT share "
-        "code numbers with the Renogy controller's charging_state",
+        "code numbers with the Renogy controller's charging_state. Only code 0 "
+        "(off) has been seen on real hardware and cross-checked; the rest of "
+        "the table is from the protocol document and a controller that has "
+        "never charged cannot exercise them",
         codes={
             0: "off",
             2: "fault",
@@ -313,7 +334,7 @@ LABELS: Final[tuple[Label, ...]] = (
         "number",
         1,
         "enum",
-        "unverified",
+        "probable",
         "Error code; 0 is no error. This is the alertable fault signal - CS "
         "only says that something is wrong, ERR says what",
     ),
@@ -323,8 +344,10 @@ LABELS: Final[tuple[Label, ...]] = (
         "number",
         1,
         "enum",
-        "unverified",
-        "Tracker operation mode: 0 off, 1 voltage or current limited, 2 active",
+        "probable",
+        "Tracker operation mode: 0 off, 1 voltage or current limited, 2 active. "
+        "Read 0 while the controller sat with no panels and VictronConnect "
+        "agreed it was Off, which exercises exactly one of the three",
     ),
     # Yield is reported by VE.Direct in 0.01 kWh. It is scaled to WATT hours
     # here, not kilowatt hours, because the Renogy controller already publishes

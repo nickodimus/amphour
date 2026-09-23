@@ -299,10 +299,27 @@ def test_error_code_is_numeric_so_it_can_be_alerted_on():
     assert r.values["day_sequence_number"] == 180.0
 
 
-def test_mppt_fields_ship_unverified_until_checked_against_hardware():
+def test_mppt_confidence_matches_what_the_hardware_actually_proved():
+    """The 2026-09-23 check was against a SmartSolar with NO PANELS attached.
+
+    That asymmetry is the whole point. pv_voltage could be confirmed because
+    the floating input sat at 0.02V and VictronConnect said 0.02V too - a
+    wrong scale would have disagreed by 10x. Everything solar read ZERO, and a
+    zero cannot tell a 0.001 scale from a 0.01 one, so it stays unverified no
+    matter how confident the protocol document sounds.
+    """
     from amphour.drivers.victron_vedirect.fields import BY_LABEL
 
-    for label in ("VPV", "PPV", "CS", "ERR", "H19", "H20", "HSDS"):
+    # Cross-checked against an independent reading of the same instant.
+    assert BY_LABEL["VPV"].confidence == "confirmed"
+
+    # Mechanism works and one value was checked, but the rest of the range
+    # cannot be exercised by a controller that has never charged.
+    for label in ("CS", "ERR", "MPPT"):
+        assert BY_LABEL[label].confidence == "probable", label
+
+    # Read zero, so nothing about their scaling has been tested at all.
+    for label in ("PPV", "H19", "H20", "H21", "H22", "H23", "HSDS", "LOAD", "IL"):
         assert BY_LABEL[label].confidence == "unverified", label
 
 
