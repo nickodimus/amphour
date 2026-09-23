@@ -17,6 +17,7 @@ delivering. Same units, different quantities, so different names.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Final, Literal
 
@@ -27,7 +28,12 @@ Kind = Literal["number", "text"]
 
 @dataclass(frozen=True, slots=True)
 class Label:
-    """One VE.Direct label and how to interpret its text value."""
+    """One VE.Direct label and how to interpret its text value.
+
+    `codes` turns a numeric status word into a name. A label with codes is
+    reported as TEXT, never as a number, and that is a deliberate choice - see
+    the note on CS below.
+    """
 
     label: str
     name: str
@@ -36,6 +42,7 @@ class Label:
     unit: str
     confidence: Confidence
     help: str
+    codes: Mapping[int, str] | None = None
 
     def as_field(self) -> Field:
         return Field(self.name, self.unit, self.confidence, self.help)
@@ -233,6 +240,144 @@ LABELS: Final[tuple[Label, ...]] = (
         "kilowatt_hours",
         "confirmed",
         "Cumulative charged energy",
+    ),
+    # --- solar charge controller (SmartSolar MPPT) ------------------------
+    #
+    # A VE.Direct MPPT speaks the identical protocol with a different label
+    # set, so it needs no separate driver - only this vocabulary. These entries
+    # come from the published VE.Direct protocol document and, unlike
+    # everything above, have NOT been cross-checked against a second
+    # implementation or a live unit. They therefore ship `unverified` and are
+    # not exported by default. Promote them once they have been read against
+    # VictronConnect on the real controller.
+    #
+    # Names are chosen to match what the Renogy charge controller already calls
+    # the same physical quantity, so one query compares two controllers.
+    Label("VPV", "pv_voltage", "number", 0.001, "volts", "unverified", "Panel voltage"),
+    Label("PPV", "pv_power", "number", 1, "watts", "unverified", "Panel power"),
+    Label(
+        "IL",
+        "load_current",
+        "number",
+        0.001,
+        "amperes",
+        "unverified",
+        "Current delivered through the load output terminals",
+    ),
+    Label("LOAD", "load_state", "text", 1, "state", "unverified", "Load output on or off"),
+    # CS is reported as TEXT and deliberately has NO numeric twin.
+    #
+    # The Renogy controller already publishes a numeric `charging_state`, and
+    # its code set is NOT Victron's: Renogy 4 means boost, Victron 4 means
+    # absorption. Publishing Victron's number under that name would put two
+    # incompatible vocabularies on one metric, and anything decoding it with
+    # the Renogy table - Matilda reads this field and says the stage out loud -
+    # would confidently report the wrong charger state.
+    #
+    # Text is never exported to Prometheus and overwrites the numeric field in
+    # InfluxDB, so reporting the NAME keeps `amphour_charging_state` a
+    # Renogy-only metric and leaves every existing consumer correct. Numeric
+    # fault alerting belongs on `error_code` below, which is the better signal
+    # anyway: CS only says "fault", ERR says which one.
+    Label(
+        "CS",
+        "charging_state",
+        "text",
+        1,
+        "state",
+        "unverified",
+        "Charger stage by name. Victron's own vocabulary, which does NOT share "
+        "code numbers with the Renogy controller's charging_state",
+        codes={
+            0: "off",
+            2: "fault",
+            3: "bulk",
+            4: "absorption",
+            5: "float",
+            6: "storage",
+            7: "equalize_manual",
+            245: "starting_up",
+            247: "equalize_auto",
+            252: "external_control",
+        },
+    ),
+    Label(
+        "ERR",
+        "error_code",
+        "number",
+        1,
+        "enum",
+        "unverified",
+        "Error code; 0 is no error. This is the alertable fault signal - CS "
+        "only says that something is wrong, ERR says what",
+    ),
+    Label(
+        "MPPT",
+        "tracker_mode",
+        "number",
+        1,
+        "enum",
+        "unverified",
+        "Tracker operation mode: 0 off, 1 voltage or current limited, 2 active",
+    ),
+    # Yield is reported by VE.Direct in 0.01 kWh. It is scaled to WATT hours
+    # here, not kilowatt hours, because the Renogy controller already publishes
+    # power_generation_today/total in watt_hours and one metric cannot carry
+    # two units. The shunt's discharged_energy/charged_energy above keep
+    # kilowatt_hours because nothing else declares those names.
+    Label(
+        "H19",
+        "power_generation_total",
+        "number",
+        10,
+        "watt_hours",
+        "unverified",
+        "Lifetime yield",
+    ),
+    Label(
+        "H20",
+        "power_generation_today",
+        "number",
+        10,
+        "watt_hours",
+        "unverified",
+        "Yield today",
+    ),
+    Label(
+        "H21",
+        "charging_power_max_today",
+        "number",
+        1,
+        "watts",
+        "unverified",
+        "Maximum power today",
+    ),
+    Label(
+        "H22",
+        "power_generation_yesterday",
+        "number",
+        10,
+        "watt_hours",
+        "unverified",
+        "Yield yesterday",
+    ),
+    Label(
+        "H23",
+        "charging_power_max_yesterday",
+        "number",
+        1,
+        "watts",
+        "unverified",
+        "Maximum power yesterday",
+    ),
+    Label(
+        "HSDS",
+        "day_sequence_number",
+        "number",
+        1,
+        "count",
+        "unverified",
+        "Day sequence number, 0 to 364; it wraps and is not a date",
     ),
 )
 

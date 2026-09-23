@@ -50,7 +50,13 @@ interval = 30.0
 # stale_after = 15.0
 
 # A second VE.Direct device - an MPPT charge controller, say - is the same
-# driver on a different port.
+# driver on a different port. A SmartSolar speaks the identical protocol with a
+# different label set, so it needs no separate driver.
+#
+# NOTE: the MPPT labels (panel voltage and power, charge state, yield) ship
+# `unverified` until they have been read against VictronConnect on a real
+# controller, and unverified fields are NOT exported by default. Set
+# include_unverified = true on the sink, or wait for them to be promoted.
 # [[device]]
 # name = "mppt"
 # driver = "victron_vedirect"

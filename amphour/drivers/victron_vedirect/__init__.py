@@ -146,7 +146,17 @@ class VEDirectDevice(StreamingDevice):
             if spec is None:
                 continue  # a label this driver does not model yet
             if spec.kind == "text":
-                text[spec.name] = raw
+                if spec.codes is not None:
+                    # A numeric status word reported by NAME. An unknown code
+                    # is surfaced as itself rather than dropped: a controller
+                    # in a state this table has not seen is exactly the moment
+                    # you want to be told, not the moment to go quiet.
+                    try:
+                        text[spec.name] = spec.codes.get(int(raw), f"unknown_{raw}")
+                    except ValueError:
+                        log.debug("[%s] %s=%r is not a status code", self.name, label, raw)
+                else:
+                    text[spec.name] = raw
                 continue
             try:
                 number = int(raw)

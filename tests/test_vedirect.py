@@ -234,3 +234,86 @@ async def test_a_healthy_stream_is_not_called_stale(blocks):
         await asyncio.gather(feeder, return_exceptions=True)
     assert len(seen) >= 3
     assert seen[0].values["battery_voltage"] > 0
+
+
+# --- SmartSolar MPPT vocabulary ---------------------------------------------
+#
+# A VE.Direct MPPT speaks the identical protocol with a different label set.
+# These labels ship `unverified` until they have been read against
+# VictronConnect on the real controller, so these tests check the SHAPE of the
+# mapping - names, units, scaling, and the deliberate CS decision - not that
+# any particular number is what the hardware meant.
+
+
+def _mppt_reading(**labels):
+    """Build a Reading from MPPT labels without needing a serial port."""
+    from amphour.drivers.victron_vedirect import VEDirectDevice
+
+    device = VEDirectDevice("smartsolar", "/dev/null")
+    device._latest = {k: str(v) for k, v in labels.items()}
+    return device._build_reading()
+
+
+def test_mppt_solar_labels_decode_with_renogy_names():
+    r = _mppt_reading(V=13100, I=4200, VPV=42500, PPV=55, IL=1500)
+    assert r.values["pv_voltage"] == 42.5
+    assert r.values["pv_power"] == 55.0
+    assert r.values["load_current"] == 1.5
+    # the shunt labels still work on the same driver
+    assert r.values["battery_voltage"] == 13.1
+
+
+def test_yield_is_scaled_to_watt_hours_not_kilowatt_hours():
+    # VE.Direct reports yield in 0.01 kWh; renogy publishes power_generation_*
+    # in watt_hours, and one metric cannot carry two units.
+    r = _mppt_reading(H20=123, H19=4567, H22=99)
+    assert r.values["power_generation_today"] == 1230.0
+    assert r.values["power_generation_total"] == 45670.0
+    assert r.values["power_generation_yesterday"] == 990.0
+
+
+def test_charge_state_is_reported_by_name_and_never_as_a_number():
+    # The whole point: Renogy 4 is "boost", Victron 4 is "absorption". A
+    # numeric charging_state from this driver would put two incompatible
+    # vocabularies on one metric and make every existing consumer wrong.
+    r = _mppt_reading(CS=4)
+    assert r.text["charging_state"] == "absorption"
+    assert "charging_state" not in r.values
+
+
+def test_an_unknown_charge_state_is_surfaced_not_swallowed():
+    r = _mppt_reading(CS=99)
+    assert r.text["charging_state"] == "unknown_99"
+
+
+def test_load_output_state_is_text():
+    r = _mppt_reading(LOAD="ON")
+    assert r.text["load_state"] == "ON"
+
+
+def test_error_code_is_numeric_so_it_can_be_alerted_on():
+    # CS only says something is wrong; ERR says what, and Prometheus can hold it.
+    r = _mppt_reading(ERR=2, MPPT=2, HSDS=180)
+    assert r.values["error_code"] == 2.0
+    assert r.values["tracker_mode"] == 2.0
+    assert r.values["day_sequence_number"] == 180.0
+
+
+def test_mppt_fields_ship_unverified_until_checked_against_hardware():
+    from amphour.drivers.victron_vedirect.fields import BY_LABEL
+
+    for label in ("VPV", "PPV", "CS", "ERR", "H19", "H20", "HSDS"):
+        assert BY_LABEL[label].confidence == "unverified", label
+
+
+def test_no_field_name_carries_two_units_across_drivers():
+    # The amps/amperes collision of 4d636f1, checked for the names this change
+    # newly shares with the Renogy charge controller.
+    from amphour.drivers import fields_for
+
+    renogy = {f.name: f.unit for f in fields_for("renogy_bt1")}
+    ours = {f.name: f.unit for f in fields_for("victron_vedirect")}
+    shared = set(renogy) & set(ours)
+    assert shared, "expected these two to share vocabulary"
+    mismatched = {n: (renogy[n], ours[n]) for n in shared if renogy[n] != ours[n]}
+    assert not mismatched, f"same field name, different units: {mismatched}"
