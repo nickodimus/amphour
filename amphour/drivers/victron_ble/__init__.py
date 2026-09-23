@@ -63,6 +63,7 @@ class VictronBLEDevice(StreamingDevice):
         encryption_key: str,
         *,
         adapter: str | None = None,
+        emit_interval: float = 30.0,
         stale_after: float = 120.0,
         backoff_initial: float = 5.0,
         backoff_max: float = 300.0,
@@ -79,7 +80,14 @@ class VictronBLEDevice(StreamingDevice):
                 f"{address!r} is not a BLE MAC address (expected AA:BB:CC:DD:EE:FF)"
             )
         self.adapter = adapter
+        self.emit_interval = emit_interval
         self.stale_after = stale_after
+        # None, not 0.0: the first advertisement is always published, and the
+        # clock only starts after it. victron_vedirect initialises this to 0.0
+        # and compares against loop.time(), which on Linux is seconds since
+        # boot - so on a freshly booted machine it suppresses every reading
+        # until uptime passes emit_interval. Same throttle, without that bug.
+        self._last_emit: float | None = None
         try:
             self._key = bytes.fromhex(encryption_key.strip())
         except ValueError as exc:
@@ -104,6 +112,18 @@ class VictronBLEDevice(StreamingDevice):
             # advertisement is a snapshot, so a full queue means the consumer
             # is behind and the newest frame will be along in a second anyway.
             self._queue.put_nowait(bytes(payload))
+
+    def _due(self, now: float) -> bool:
+        """Is it time to publish? Records the emit as a side effect when so.
+
+        Kept separate from stream() so the throttle can be exercised at chosen
+        times without driving an event loop: the arithmetic is the part that
+        breaks, not the plumbing.
+        """
+        if self._last_emit is None or now - self._last_emit >= self.emit_interval:
+            self._last_emit = now
+            return True
+        return False
 
     async def open(self) -> None:
         kwargs: dict[str, Any] = {"detection_callback": self._on_advertisement}
@@ -168,10 +188,23 @@ class VictronBLEDevice(StreamingDevice):
                 continue
 
             try:
-                yield decode_battery_monitor(plaintext, source=self.name)
+                reading = decode_battery_monitor(plaintext, source=self.name)
             except protocol.ProtocolError as exc:
                 log.warning("[%s] %s", self.name, exc)
                 continue
+
+            # A Victron device advertises several times a second. Every one of
+            # those is a complete snapshot, so the newest simply wins and the
+            # rest are dropped - there is nothing to accumulate and nothing
+            # lost by skipping one. Unthrottled this emitted ~142 readings a
+            # minute against 2 from the same shunt read over its cable: 70x the
+            # InfluxDB volume for a value that moves slowly, and - the part
+            # that actually mattered - enough journal lines to push genuine
+            # WARNINGs out of the 24h window that overwatch's guard panel
+            # reads, blinding the one display whose job is to show a fault.
+            if not self._due(asyncio.get_running_loop().time()):
+                continue
+            yield reading
 
 
 @register("victron_ble", FIELDS)
@@ -180,6 +213,7 @@ def _build(
     address: str,
     encryption_key: str | None = None,
     encryption_key_env: str | None = None,
+    interval: float = 30.0,
     **kwargs: Any,
 ) -> Device:
     """Build from config.
@@ -202,4 +236,6 @@ def _build(
             "victron_ble needs an `encryption_key` (or `encryption_key_env`); "
             "read it from VictronConnect under Product info -> Instant readout via Bluetooth"
         )
-    return VictronBLEDevice(name, address, encryption_key, **kwargs)
+    # `interval` is the shared config name for how often a device reports, so
+    # one word means the same thing across every driver.
+    return VictronBLEDevice(name, address, encryption_key, emit_interval=interval, **kwargs)

@@ -160,3 +160,32 @@ def test_a_malformed_address_fails_at_startup_not_as_a_phantom_range_problem():
     for bad in ("E0:A4:97:AE:64", "not-a-mac", "E0-A4-97-AE-64-FC", ""):
         with pytest.raises(DeviceError):
             build("victron_ble", name="shunt", address=bad, encryption_key=TEST_KEY.hex())
+
+
+def _device(**kw):
+    return build("victron_ble", name="shunt", address="AA:BB:CC:DD:EE:FF",
+                 encryption_key=TEST_KEY.hex(), **kw)
+
+
+def test_advertisements_are_throttled_to_the_emit_interval():
+    """A Victron device advertises several times a second. Unthrottled this
+    emitted 142 readings a minute against 2 from the same shunt read over its
+    cable - 70x the InfluxDB volume, and enough journal noise to push genuine
+    WARNINGs out of the 24h window that overwatch's guard panel reads."""
+    device = _device(interval=30.0)
+    assert [t for t in range(100) if device._due(float(t))] == [0, 30, 60, 90]
+
+
+def test_the_first_advertisement_is_never_withheld():
+    """Initialising the emit clock to 0.0 and comparing it against loop.time()
+    - seconds since boot on Linux - withholds every reading until uptime passes
+    the interval. victron_vedirect has that bug; this must not inherit it."""
+    assert _device(interval=30.0)._due(5.0), "5s into uptime must still publish"
+
+
+def test_interval_is_the_config_name_like_every_other_driver():
+    assert _device(interval=17.5).emit_interval == 17.5
+
+
+def test_the_default_matches_the_cable_feed_on_the_same_device():
+    assert _device().emit_interval == 30.0
