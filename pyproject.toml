@@ -26,6 +26,11 @@ dependencies = [
     # AcquireNotify, which broke start_notify() on some peripherals
     # (hbldh/bleak#1885). 3.0.2 restores StartNotify as the default.
     "bleak>=3.0.2,<4",
+    # Victron's Instant Readout advertisements are AES-CTR encrypted and the
+    # standard library has no AES. The alternative is vendoring a pure-Python
+    # implementation, which this project does not do - and hand-rolled crypto
+    # is the one place where "small and self-contained" is the wrong instinct.
+    "cryptography>=42",
     # bleak asks only for dbus-fast>=1.83.0 with no upper bound, and dbus-fast
     # went 3.x -> 5.x in six months. Cap it ourselves.
     "dbus-fast>=5.0.22,<6 ; sys_platform == 'linux'",

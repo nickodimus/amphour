@@ -1,0 +1,31 @@
+# Victron Instant Readout over BLE - example device block for config.toml.
+#
+# VERIFIED against a SmartShunt 500A/50mV on 2026-09-22, cross-checked field
+# for field against the same shunt read over VE.Direct at the same moment.
+#
+# The encryption key is PER DEVICE. Get it from VictronConnect: connect to the
+# device, gear icon -> Product info -> "Instant readout via Bluetooth" -> show
+# the encryption key. A key from one device will not decrypt another, and the
+# driver says so rather than publishing noise.
+#
+# KEEP THE KEY OUT OF THIS FILE if you can. `encryption_key_env` names an
+# environment variable instead, and the environment wins over the file - the
+# same treatment the InfluxDB credentials get, for the same reason: config
+# files get copied, backed up, and pasted into terminals.
+
+[[device]]
+name = "smartshunt-ble"
+driver = "victron_ble"
+address = "XX:XX:XX:XX:XX:XX"          # the device's BLE MAC
+encryption_key_env = "AMPHOUR_VICTRON_KEY_SHUNT"
+# encryption_key = "..."               # or inline, if you must
+# adapter = "hci0"                     # pick a radio; omit for the default
+stale_after = 120.0                    # no advertisement in this long = a fault
+
+# This driver listens, it never connects. It cannot lock another client out and
+# it costs the device nothing, so running it alongside VictronConnect - or
+# alongside a VE.Direct cable on the same device - is fine.
+#
+# What BLE does NOT carry: lifetime history, charge cycles, seconds since last
+# full charge, lifetime min/max. Those are VE.Direct only. If you need them,
+# keep the cable; you can run both at once against the same device and compare.
