@@ -109,6 +109,7 @@ def verify_frame(frame: bytes, *, address: int | None = None, words: int = WORD_
 
 # --- byte-offset decoders (offsets are into the whole frame; data starts at 3) ---
 
+
 def u16(frame: bytes, offset: int) -> int:
     return int.from_bytes(frame[offset : offset + 2], "big")
 

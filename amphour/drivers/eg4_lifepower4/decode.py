@@ -32,8 +32,7 @@ def _cells(frame: bytes) -> list[float]:
     # All 16 cells are populated on a V2 pack; a zero here would be a genuinely
     # dead/shorted cell, so unlike the older map we do NOT silently drop zeros.
     return [
-        round(protocol.u16(frame, CELL_START + i * 2) * CELL_SCALE, 3)
-        for i in range(CELL_COUNT)
+        round(protocol.u16(frame, CELL_START + i * 2) * CELL_SCALE, 3) for i in range(CELL_COUNT)
     ]
 
 

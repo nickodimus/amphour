@@ -132,3 +132,84 @@ def test_a_value_a_device_did_not_declare_is_not_published(bad):
     sink = _sink(FakeDevice("shunt", (SOC_SHUNT,)))
     asyncio.run(sink.publish(Reading(source="shunt", values={bad: 1.0})))
     assert f'amphour_{bad}{{device="shunt"}}' not in _expose(sink)
+
+
+# --- devices that emit several readings -------------------------------------
+#
+# The EG4 polls two packs on one RS485 line from ONE device block, emitting a
+# Reading per pack tagged `<name>-<label>`. That is the shape these cover.
+
+
+class FakeMultiSourceDevice(FakeDevice):
+    def __init__(self, name, fields, labels):
+        super().__init__(name, fields)
+        self.sources = tuple(f"{name}-{label}" for label in labels)
+
+
+UNVERIFIED = Field("register_0x0121", "bitfield", "unverified", "A guess")
+
+
+async def test_readings_and_failures_share_a_label_for_a_multi_pack_device():
+    """The numerator and denominator of a failure rate must be comparable.
+
+    readings_total used to be labelled by reading SOURCE and failures_total by
+    DEVICE, so `readings_total{device="eg4"}` sat at zero forever while
+    `failures_total{device="eg4"}` climbed. Any rate built from the pair was
+    nonsense, and it was nonsense silently.
+    """
+    device = FakeMultiSourceDevice("eg4", (VOLTS_SHUNT,), ("master", "slave"))
+    sink = _sink(device)
+
+    await sink.publish(Reading(source="eg4-master", values={"battery_voltage": 53.1}))
+    await sink.publish(Reading(source="eg4-slave", values={"battery_voltage": 53.2}))
+    sink.record_failure("eg4")
+
+    text = _expose(sink)
+    assert 'amphour_readings_total{device="eg4"} 2.0' in text
+    assert 'amphour_failures_total{device="eg4"} 1.0' in text
+    # and NOT split across the per-pack sources, which is what broke the rate
+    assert 'readings_total{device="eg4-master"}' not in text
+    assert 'readings_total{device="eg4-slave"}' not in text
+
+
+async def test_per_source_liveness_is_still_visible():
+    # Aggregating the counter must not cost the ability to see ONE pack go
+    # quiet. That distinction lives in the read clock, which stays per source.
+    device = FakeMultiSourceDevice("eg4", (VOLTS_SHUNT,), ("master", "slave"))
+    sink = _sink(device)
+
+    await sink.publish(Reading(source="eg4-master", values={"battery_voltage": 53.1}))
+
+    text = _expose(sink)
+    assert 'amphour_last_reading_timestamp_seconds{device="eg4-master"}' in text
+    assert 'amphour_battery_voltage{device="eg4-master"} 53.1' in text
+
+
+async def test_unverified_fields_are_filtered_for_multi_source_devices_too():
+    """The allow-list lookup missed entirely for multi-source devices.
+
+    `_allowed` was keyed by device name and looked up by reading source, so for
+    the EG4 it returned None - and None means "no filtering". Unverified fields
+    were exported regardless of include_unverified.
+    """
+    device = FakeMultiSourceDevice("eg4", (VOLTS_SHUNT, UNVERIFIED), ("master", "slave"))
+    sink = _sink(device)
+
+    await sink.publish(
+        Reading(source="eg4-master", values={"battery_voltage": 53.1, "register_0x0121": 4.0})
+    )
+
+    text = _expose(sink)
+    assert 'amphour_battery_voltage{device="eg4-master"} 53.1' in text
+    assert "register_0x0121" not in text
+
+
+async def test_single_source_devices_are_unchanged():
+    # The common case must not move: source and device name are the same string.
+    sink = _sink(FakeDevice("renogy", (VOLTS_RENOGY,)))
+    await sink.publish(Reading(source="renogy", values={"battery_voltage": 53.4}))
+    sink.record_failure("renogy")
+
+    text = _expose(sink)
+    assert 'amphour_readings_total{device="renogy"} 1.0' in text
+    assert 'amphour_failures_total{device="renogy"} 1.0' in text

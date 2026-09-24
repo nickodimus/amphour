@@ -68,6 +68,11 @@ class EG4LifePower4Device(PollingDevice):
         super().__init__(name, interval=interval, **kwargs)
         self.port = port
         self.packs = packs
+        # One device block, one Reading per pack. The sinks need this to map a
+        # reading back to the device that produced it - without it a counter
+        # labelled by device name and one labelled by reading source can never
+        # be compared, which is exactly the bug this attribute fixes.
+        self.sources = tuple(f"{name}-{pack.label}" for pack in packs)
         self.baud = baud
         self.response_timeout = response_timeout
         self._fd: int | None = None
@@ -102,8 +107,13 @@ class EG4LifePower4Device(PollingDevice):
         self._fd = fd
         self._buf.clear()
         asyncio.get_running_loop().add_reader(fd, self._on_readable)
-        log.info("[%s] EG4 on %s at %d baud, packs: %s", self.name, self.port, self.baud,
-                 ", ".join(f"{p.label}@{p.address}" for p in self.packs))
+        log.info(
+            "[%s] EG4 on %s at %d baud, packs: %s",
+            self.name,
+            self.port,
+            self.baud,
+            ", ".join(f"{p.label}@{p.address}" for p in self.packs),
+        )
 
     def _on_readable(self) -> None:
         fd = self._fd

@@ -39,7 +39,7 @@ class Register:
     """One EG4 holding value and how to turn its bytes into a Field value."""
 
     name: str
-    offset: int          # byte offset into the reply frame
+    offset: int  # byte offset into the reply frame
     kind: Kind
     scale: float
     field: Field
@@ -48,41 +48,119 @@ class Register:
 # --- scalar direct-read registers -----------------------------------------
 # offset = 3 (data start) + register_index * 2.
 REGISTERS: Final[tuple[Register, ...]] = (
-    Register("battery_voltage", 3, "u16", 0.01,
-             Field("battery_voltage", "volts", "confirmed",
-                   "Pack terminal voltage reported by the EG4 BMS (reg 0x0000)")),
-    Register("battery_current", 5, "s16", 0.01,
-             Field("battery_current", "amperes", "confirmed",
-                   "Pack current, + charging / - discharging, from the BMS (reg 0x0001)")),
-    Register("battery_state_of_charge", 45, "u16", 1.0,
-             Field("battery_state_of_charge", "percent", "confirmed",
-                   "Pack SoC from the BMS (reg 0x0015; compare against the shunt)")),
-    Register("battery_state_of_health", 47, "u16", 1.0,
-             Field("battery_state_of_health", "percent", "confirmed",
-                   "Pack state of health from the BMS (reg 0x0016)")),
-    Register("battery_capacity", 49, "u16", 1.0,
-             Field("battery_capacity", "amp_hours", "confirmed",
-                   "Full/rated capacity reported by the BMS (reg 0x0017)")),
-    Register("battery_remaining_capacity", 51, "u16", 1.0,
-             Field("battery_remaining_capacity", "amp_hours", "confirmed",
-                   "Remaining capacity reported by the BMS (reg 0x0018)")),
-    Register("battery_temperature_pcb", 39, "s16", 1.0,
-             Field("battery_temperature_pcb", "celsius", "confirmed",
-                   "BMS board temperature (reg 0x0012)")),
-    Register("battery_temperature_ambient", 41, "s16", 1.0,
-             Field("battery_temperature_ambient", "celsius", "confirmed",
-                   "Ambient temperature at the pack (reg 0x0013)")),
-    Register("battery_temperature_cell", 43, "s16", 1.0,
-             Field("battery_temperature_cell", "celsius", "confirmed",
-                   "Cell-group temperature at the pack (reg 0x0014)")),
+    Register(
+        "battery_voltage",
+        3,
+        "u16",
+        0.01,
+        Field(
+            "battery_voltage",
+            "volts",
+            "confirmed",
+            "Pack terminal voltage reported by the EG4 BMS (reg 0x0000)",
+        ),
+    ),
+    Register(
+        "battery_current",
+        5,
+        "s16",
+        0.01,
+        Field(
+            "battery_current",
+            "amperes",
+            "confirmed",
+            "Pack current, + charging / - discharging, from the BMS (reg 0x0001)",
+        ),
+    ),
+    Register(
+        "battery_state_of_charge",
+        45,
+        "u16",
+        1.0,
+        Field(
+            "battery_state_of_charge",
+            "percent",
+            "confirmed",
+            "Pack SoC from the BMS (reg 0x0015; compare against the shunt)",
+        ),
+    ),
+    Register(
+        "battery_state_of_health",
+        47,
+        "u16",
+        1.0,
+        Field(
+            "battery_state_of_health",
+            "percent",
+            "confirmed",
+            "Pack state of health from the BMS (reg 0x0016)",
+        ),
+    ),
+    Register(
+        "battery_capacity",
+        49,
+        "u16",
+        1.0,
+        Field(
+            "battery_capacity",
+            "amp_hours",
+            "confirmed",
+            "Full/rated capacity reported by the BMS (reg 0x0017)",
+        ),
+    ),
+    Register(
+        "battery_remaining_capacity",
+        51,
+        "u16",
+        1.0,
+        Field(
+            "battery_remaining_capacity",
+            "amp_hours",
+            "confirmed",
+            "Remaining capacity reported by the BMS (reg 0x0018)",
+        ),
+    ),
+    Register(
+        "battery_temperature_pcb",
+        39,
+        "s16",
+        1.0,
+        Field(
+            "battery_temperature_pcb", "celsius", "confirmed", "BMS board temperature (reg 0x0012)"
+        ),
+    ),
+    Register(
+        "battery_temperature_ambient",
+        41,
+        "s16",
+        1.0,
+        Field(
+            "battery_temperature_ambient",
+            "celsius",
+            "confirmed",
+            "Ambient temperature at the pack (reg 0x0013)",
+        ),
+    ),
+    Register(
+        "battery_temperature_cell",
+        43,
+        "s16",
+        1.0,
+        Field(
+            "battery_temperature_cell",
+            "celsius",
+            "confirmed",
+            "Cell-group temperature at the pack (reg 0x0014)",
+        ),
+    ),
 )
 
 # --- cell block (derived in decode.py) ------------------------------------
 # 16 series cells on a 48 V LiFePO4 pack, each a big-endian u16 in millivolts,
 # contiguous from CELL_START (register 0x0002).
-CELL_START: Final = 7            # byte offset of register 0x0002
+CELL_START: Final = 7  # byte offset of register 0x0002
 CELL_COUNT: Final = 16
-CELL_SCALE: Final = 0.001        # mV -> V
+CELL_SCALE: Final = 0.001  # mV -> V
 
 # Per-cell fields, emitted individually from the cell block in decode.py (so the
 # wall can draw a 16-bar cell chart, the way the EG4 app shows it) alongside the
@@ -103,13 +181,15 @@ TEMP_OFFSETS: Final = (39, 41, 43)
 DERIVED_FIELDS: Final[tuple[Field, ...]] = (
     Field("cell_voltage_min", "volts", "confirmed", "Lowest series-cell voltage"),
     Field("cell_voltage_max", "volts", "confirmed", "Highest series-cell voltage"),
-    Field("cell_voltage_delta", "volts", "confirmed",
-          "Max minus min cell voltage — the pack's balance, the number that matters most"),
+    Field(
+        "cell_voltage_delta",
+        "volts",
+        "confirmed",
+        "Max minus min cell voltage — the pack's balance, the number that matters most",
+    ),
     Field("battery_temperature", "celsius", "confirmed", "Warmest reported pack temperature"),
     Field("battery_temperature_min", "celsius", "confirmed", "Coolest reported pack temperature"),
 )
 
 # The full field tuple the driver declares (registry + sinks read this).
-FIELDS: Final[tuple[Field, ...]] = (
-    tuple(r.field for r in REGISTERS) + CELL_FIELDS + DERIVED_FIELDS
-)
+FIELDS: Final[tuple[Field, ...]] = tuple(r.field for r in REGISTERS) + CELL_FIELDS + DERIVED_FIELDS

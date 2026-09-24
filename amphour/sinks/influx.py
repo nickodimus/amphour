@@ -58,8 +58,14 @@ class InfluxSink:
         self.flush_interval = flush_interval
         self.timeout = timeout
         self.retention_policy = retention_policy
+        # Keyed by reading SOURCE, not device name. A driver emitting several
+        # readings per device (the EG4's two packs) reports sources the device
+        # name never matches, and a miss here meant `allowed` came back None and
+        # the unverified-field filter silently did not apply to that device.
         self._allowed = {
-            d.name: exported(d.fields, include_unverified=include_unverified) for d in devices
+            source: exported(d.fields, include_unverified=include_unverified)
+            for d in devices
+            for source in getattr(d, "sources", (d.name,))
         }
         self._buffer: list[str] = []
         self._last_flush = 0.0

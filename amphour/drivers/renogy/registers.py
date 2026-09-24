@@ -320,9 +320,16 @@ REGISTERS: Final[tuple[Register, ...]] = (
         "Sits immediately after charging state. First guessed to be fault/alarm bits, "
         "but across 30 captured frames it tracks charging_state exactly: state 0 -> 4 "
         "(11/11 frames), state 2 -> 1 (19/19 frames), no exceptions. That is a "
-        "companion status word, not an independent fault register. Only two charging "
-        "states have been observed, so this is suggestive, not proven. Exported raw "
-        "and deliberately not decoded into named faults",
+        "companion status word, not an independent fault register. Exported raw and "
+        "deliberately not decoded into named faults.\n\n"
+        "Observed states as of 2026-09-24: 0 (deactivated), 2 (mppt) and 5 "
+        "(floating). The correlation above was measured across 30 frames that "
+        "contained only 0 and 2, so it remains suggestive rather than proven - "
+        "nothing has yet recorded what this word does in floating. Boost (4) is "
+        "still uncaptured: the bank passed through it on 2026-09-24 while the "
+        "logger was powered down for the charge, so it was seen on the "
+        "controller and nowhere else. Do not read this note as evidence the "
+        "controller cannot reach those states",
     ),
 )
 

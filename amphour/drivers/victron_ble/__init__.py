@@ -76,9 +76,7 @@ class VictronBLEDevice(StreamingDevice):
             # reports "no advertisement in Ns - out of range, powered down, or
             # Instant Readout turned off" forever: a config error wearing a
             # radio error's clothes, which sends you outside with a laptop.
-            raise DeviceError(
-                f"{address!r} is not a BLE MAC address (expected AA:BB:CC:DD:EE:FF)"
-            )
+            raise DeviceError(f"{address!r} is not a BLE MAC address (expected AA:BB:CC:DD:EE:FF)")
         self.adapter = adapter
         self.emit_interval = emit_interval
         self.stale_after = stale_after

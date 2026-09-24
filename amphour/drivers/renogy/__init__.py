@@ -152,9 +152,7 @@ class RenogyBT1Device(PollingDevice):
                 if attempt < self.connect_attempts:
                     await asyncio.sleep(self.connect_retry_delay)
 
-        raise DeviceError(
-            f"connect failed after {self.connect_attempts} attempts: {last_exc}"
-        )
+        raise DeviceError(f"connect failed after {self.connect_attempts} attempts: {last_exc}")
 
     async def close(self) -> None:
         client, self._client = self._client, None

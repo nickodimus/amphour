@@ -74,6 +74,10 @@ class PrometheusSink:
         self.prefix = prefix
         self.registry = registry if registry is not None else CollectorRegistry()
         self._allowed: dict[str, set[str]] = {}
+        # reading source -> the configured device that emits it. Usually they are
+        # the same string; a driver that emits several readings per device (the
+        # EG4's two packs) declares `sources` and they are not.
+        self._device_of: dict[str, str] = {}
         self._gauges: dict[str, Gauge] = {}
 
         # Collect every declaration of every field BEFORE creating any metric.
@@ -82,7 +86,9 @@ class PrometheusSink:
         declarations: dict[str, list[tuple[str, Field]]] = {}
         for device in devices:
             allowed = exported(device.fields, include_unverified=include_unverified)
-            self._allowed[device.name] = allowed
+            for source in getattr(device, "sources", (device.name,)):
+                self._allowed[source] = allowed
+                self._device_of[source] = device.name
             for spec in device.fields:
                 if spec.name in allowed:
                     declarations.setdefault(spec.name, []).append((device.name, spec))
@@ -149,7 +155,14 @@ class PrometheusSink:
             gauge = self._gauges.get(name)
             if gauge is not None:
                 gauge.labels(device=reading.source).set(value)
-        self._readings.labels(device=reading.source).inc()
+        # Counted against the DEVICE, not the reading source, so that it shares a
+        # label with failures_total - which only ever knows the device, because a
+        # connect failure belongs to the port and not to one pack behind it. When
+        # the two carried different labels the EG4's readings_total sat at zero
+        # forever while its failures climbed, and any rate built from them was
+        # nonsense. Per-source liveness lives in last_reading_timestamp_seconds
+        # below, which stays labelled by source.
+        self._readings.labels(device=self._device_of.get(reading.source, reading.source)).inc()
         self._last_read.labels(device=reading.source).set(time.time())
 
     def record_failure(self, device: str) -> None:
