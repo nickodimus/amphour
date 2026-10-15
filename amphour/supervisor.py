@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Sequence
 
 from .device import Device
@@ -24,10 +25,16 @@ log = logging.getLogger(__name__)
 
 
 class Supervisor:
-    def __init__(self, devices: Sequence[Device], sinks: Sequence[Sink]) -> None:
+    def __init__(self, devices: Sequence[Device], sinks: Sequence[Sink], *,
+                 retry_initial: float = 15.0, retry_max: float = 300.0,
+                 stable_run: float = 120.0) -> None:
         self.devices = list(devices)
         self.sinks = list(sinks)
         self._stop = asyncio.Event()
+        # Backoff for restarting a device whose run() raised -- see _guard.
+        self._retry_initial = retry_initial
+        self._retry_max = retry_max
+        self._stable_run = stable_run
 
     def stop(self) -> None:
         self._stop.set()
@@ -42,21 +49,44 @@ class Supervisor:
                 log.exception("sink %s failed to publish", sink.name)
 
     async def _guard(self, device: Device) -> None:
-        try:
-            await device.run(self._emit)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            # A driver raising something its own retry loop does not recognise
-            # used to propagate through the TaskGroup and end the process, so a
-            # single malformed frame on one device silenced every other device
-            # too. Independence is the whole reason this supervisor exists: the
-            # failing device stops and says so loudly, the rest keep reporting.
-            log.exception(
-                "[%s] driver raised; this device has STOPPED, others continue", device.name
-            )
-        else:
-            log.error("[%s] run() returned; a driver should run until cancelled", device.name)
+        """Run one device forever, restarting it after a backoff if it raises.
+
+        A driver's run() carries its own retry loop for connect/read failures.
+        When something escapes that loop and raises -- or run() returns -- the
+        device used to STOP for the life of the process, so a transient glitch
+        (a Renogy BLE module that wandered off, a controller briefly unreachable)
+        stayed dead until a manual `systemctl restart amphour`. Now the
+        supervisor restarts the device after a pause that climbs to a cap, so it
+        recovers on its own. A raise on one device never touches another either
+        way -- independence is the whole reason this supervisor exists.
+        """
+        delay = self._retry_initial
+        while not self._stop.is_set():
+            started = time.monotonic()
+            try:
+                await device.run(self._emit)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                log.exception("[%s] driver raised", device.name)
+            else:
+                log.error("[%s] run() returned; a driver should run until cancelled",
+                          device.name)
+            if self._stop.is_set():
+                break
+            # A device that ran healthily for a while before failing backs off
+            # from scratch; one that fails fast keeps climbing to the cap, so a
+            # genuinely dead device does not spin.
+            if time.monotonic() - started >= self._stable_run:
+                delay = self._retry_initial
+            log.warning("[%s] restarting in %.0fs (other devices unaffected)",
+                        device.name, delay)
+            try:
+                await asyncio.wait_for(self._stop.wait(), timeout=delay)
+                break  # stop was requested during the backoff
+            except asyncio.TimeoutError:
+                pass
+            delay = min(delay * 2, self._retry_max)
 
     async def run(self) -> None:
         log.info(

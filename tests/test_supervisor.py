@@ -113,6 +113,60 @@ async def test_a_device_recovers_after_transient_failures():
     assert len(sink.readings) >= 4
 
 
+class RaisingRunDevice:
+    """A device whose run() escapes its own retry loop and RAISES.
+
+    This is the shape no PollingDevice fake covers: the driver's internal
+    backoff gives up and lets an exception out (the Renogy BT module that
+    connects, answers nothing, and finally raises). The supervisor -- not the
+    device -- is what must recover it.
+    """
+
+    def __init__(self, name, raises):
+        self.name = name
+        self._raises_left = raises
+        self.runs = 0
+
+    async def run(self, emit):
+        self.runs += 1
+        await asyncio.sleep(0)  # a suspension point so the loop can be observed
+        if self._raises_left > 0:
+            self._raises_left -= 1
+            raise RuntimeError(f"run escaped its loop ({self.runs})")
+        await asyncio.Event().wait()  # healthy: run until cancelled
+
+
+async def test_a_device_whose_run_raises_is_restarted_not_abandoned():
+    """Regression: a driver that raises out of its own retry loop used to STOP
+    for the life of the process (the Renogy-BLE-wandered-off failure, which took
+    a manual service restart to clear). The supervisor now restarts it after a
+    backoff, and a working device alongside it never notices."""
+    raising = RaisingRunDevice("renogy-ish", raises=2)
+    healthy = FakeDevice("shunt", [12.8])
+    sink = RecordingSink()
+    sup = Supervisor([raising, healthy], [sink],
+                     retry_initial=0.01, retry_max=0.02, stable_run=0.0)
+    await run_until(sup, lambda: raising.runs >= 3 and len(sink.readings) >= 1,
+                    timeout=3.0)
+    assert raising.runs >= 3, f"run() called only {raising.runs}x — not restarted"
+    assert any(r.source == "shunt" for r in sink.readings)
+
+
+async def test_a_permanently_raising_device_backs_off_instead_of_spinning():
+    """A device that raises every run must not restart as fast as the loop
+    allows; the backoff climbs to a cap so a dead device does not spin."""
+    dead = RaisingRunDevice("dead", raises=10_000)
+    sup = Supervisor([dead], [RecordingSink()],
+                     retry_initial=0.02, retry_max=0.08, stable_run=100.0)
+    task = asyncio.create_task(sup.run())
+    try:
+        await asyncio.sleep(0.3)
+    finally:
+        sup.stop()
+        await task
+    assert dead.runs <= 12, f"restarted {dead.runs}x in 0.3s — not backing off"
+
+
 class NeverReadsDevice(PollingDevice):
     """Connects perfectly, then fails every read.
 
