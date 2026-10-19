@@ -9,6 +9,7 @@ import signal
 import sys
 
 from . import __version__, drivers, logsetup
+from .ble import ScannerHub
 from .config import Config, ConfigError, load
 from .device import Device
 from .reading import Reading
@@ -193,25 +194,48 @@ async def _once(devices: list[Device], timeout: float = 90.0) -> int:
     return 0
 
 
+def _attach_hubs(devices: list[Device]) -> list[ScannerHub]:
+    """Give every BLE driver the one shared scanner for its adapter.
+
+    One hub per distinct adapter, so a host with two radios keeps them
+    independent. Mirrors the set_failure_hook injection below: a driver that
+    has no `set_hub` (the serial drivers) is simply skipped. The scanner itself
+    starts lazily from each driver's open(); here we only wire and own them.
+    """
+    hubs: dict[str | None, ScannerHub] = {}
+    for device in devices:
+        setter = getattr(device, "set_hub", None)
+        if callable(setter):
+            adapter = getattr(device, "adapter", None)
+            hub = hubs.setdefault(adapter, ScannerHub(adapter))
+            setter(hub)
+    return list(hubs.values())
+
+
 async def _run(config: Config, once: bool) -> int:
     devices = _build_devices(config)
-    if once:
-        return await _once(devices)
+    hubs = _attach_hubs(devices)
+    try:
+        if once:
+            return await _once(devices)
 
-    sinks, prometheus = _build_sinks(config, devices)
-    if prometheus is not None:
-        hook = getattr(prometheus, "record_failure", None)
-        for device in devices:
-            setter = getattr(device, "set_failure_hook", None)
-            if callable(setter) and callable(hook):
-                setter(hook)
+        sinks, prometheus = _build_sinks(config, devices)
+        if prometheus is not None:
+            hook = getattr(prometheus, "record_failure", None)
+            for device in devices:
+                setter = getattr(device, "set_failure_hook", None)
+                if callable(setter) and callable(hook):
+                    setter(hook)
 
-    supervisor = Supervisor(devices, sinks)
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, supervisor.stop)
-    await supervisor.run()
-    return 0
+        supervisor = Supervisor(devices, sinks)
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, supervisor.stop)
+        await supervisor.run()
+        return 0
+    finally:
+        for hub in hubs:
+            await hub.aclose()
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -277,15 +277,16 @@ def test_malformed_address_is_refused_at_construction(bad):
 
 
 @pytest.mark.parametrize("failure", [BleakError("no adapter"), OSError("adapter went away")])
-async def test_failing_scan_start_is_retryable(monkeypatch, failure):
+async def test_failing_scan_start_is_retryable(failure):
     # Must be DeviceError: the supervisor stops a device permanently when it
     # raises anything the retry loop does not recognise, and an adapter reset
-    # has to be survivable.
-    class Boom:
-        def __init__(self, *a, **k): ...
-        async def start(self):
+    # has to be survivable. The scan now starts in the shared hub, so a hub
+    # whose ensure_started() raises stands in for an adapter that has vanished.
+    class BoomHub:
+        async def ensure_started(self):
             raise failure
 
-    monkeypatch.setattr("amphour.drivers.mopeka.BleakScanner", Boom)
+    device = _device()
+    device.set_hub(BoomHub())
     with pytest.raises(DeviceError, match="cannot start BLE scan"):
-        await _device().open()
+        await device.open()

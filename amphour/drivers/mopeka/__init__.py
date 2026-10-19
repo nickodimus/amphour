@@ -23,19 +23,16 @@ visible in the journal.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import re
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
 
-from bleak import BleakScanner
-from bleak.args.bluez import BlueZScannerArgs
 from bleak.backends.device import BLEDevice
 from bleak.backends.scanner import AdvertisementData
-from bleak.exc import BleakError
 
+from ...ble import ScannerHub
 from ...device import DeviceError, DeviceTimeout, StreamingDevice
 from ...fields import Field
 from ...reading import Reading
@@ -108,27 +105,33 @@ class MopekaProCheckDevice(StreamingDevice):
         self.empty_mm = empty_mm
         self.full_mm = full_mm
 
-        self._scanner: BleakScanner | None = None
+        self._hub: ScannerHub | None = None
+        self._sub: int | None = None
         self._latest: Advertisement | None = None
         self._arrived = asyncio.Event()
         self._ignored_reads = 0
 
     # --- radio ------------------------------------------------------------
 
+    def set_hub(self, hub: ScannerHub) -> None:
+        """Injected by the CLI: the shared scanner for this device's adapter."""
+        self._hub = hub
+
     async def open(self) -> None:
-        bluez: BlueZScannerArgs = {"adapter": self.adapter} if self.adapter else {}
-        scanner = BleakScanner(detection_callback=self._on_advertisement, bluez=bluez)
+        if self._hub is None:
+            raise DeviceError("no BLE scanner hub was set for this device")
         try:
-            await scanner.start()
-        except (BleakError, OSError) as exc:
-            # OSError as well as BleakError: this property resets USB Bluetooth
-            # adapters often enough that the overwatch wall counts them, and an
-            # adapter that has just vanished must be a RETRYABLE fault. The
-            # supervisor stops a device for good when it raises something the
-            # retry loop does not recognise, so an unwrapped error here would
-            # turn a passing USB glitch into a tank that never reports again.
+            await self._hub.ensure_started()
+        except Exception as exc:
+            # Broad on purpose: starting the shared scan raises BleakError and
+            # OSError alike, and this property resets USB Bluetooth adapters
+            # often enough that the overwatch wall counts them. An adapter that
+            # has just vanished must be a RETRYABLE fault -- the supervisor
+            # stops a device for good when it raises something the retry loop
+            # does not recognise, so an unwrapped error here would turn a
+            # passing USB glitch into a tank that never reports again.
             raise DeviceError(f"cannot start BLE scan: {exc}") from exc
-        self._scanner = scanner
+        self._sub = self._hub.subscribe(self._on_advertisement)
         self._latest = None
         self._arrived.clear()
         log.info(
@@ -143,11 +146,11 @@ class MopekaProCheckDevice(StreamingDevice):
         )
 
     async def close(self) -> None:
-        scanner, self._scanner = self._scanner, None
-        if scanner is None:
-            return
-        with contextlib.suppress(BleakError, OSError):
-            await scanner.stop()
+        # The scanner is shared and owned by the hub; only drop this device's
+        # subscription, never stop the radio the other drivers are using.
+        if self._sub is not None and self._hub is not None:
+            self._hub.unsubscribe(self._sub)
+        self._sub = None
 
     def _on_advertisement(self, device: BLEDevice, data: AdvertisementData) -> None:
         if device.address.upper() != self.address:

@@ -11,11 +11,12 @@ import contextlib
 import logging
 from typing import Any
 
-from bleak import BleakClient, BleakScanner
-from bleak.args.bluez import BlueZClientArgs, BlueZScannerArgs
+from bleak import BleakClient
+from bleak.args.bluez import BlueZClientArgs
 from bleak.backends.device import BLEDevice
 from bleak.exc import BleakError
 
+from ...ble import ScannerHub
 from ...device import DeviceError, DeviceTimeout, PollingDevice
 from ...fields import Field
 from ...reading import Reading
@@ -74,6 +75,7 @@ class RenogyBT1Device(PollingDevice):
         self.connect_attempts = connect_attempts
         self.connect_retry_delay = connect_retry_delay
 
+        self._hub: ScannerHub | None = None
         self._client: BleakClient | None = None
         self._buffer = bytearray()
         self._want = 0
@@ -82,19 +84,26 @@ class RenogyBT1Device(PollingDevice):
 
     # --- connection -------------------------------------------------------
 
-    def _scanner_args(self) -> BlueZScannerArgs:
-        return {"adapter": self.adapter} if self.adapter else {}
+    def set_hub(self, hub: ScannerHub) -> None:
+        """Injected by the CLI: the shared scanner for this device's adapter."""
+        self._hub = hub
 
     async def _scan(self) -> BLEDevice | None:
+        # Ask the shared scanner for a freshly-seen device rather than starting
+        # our own discovery: a second discovery on an adapter the victron/mopeka
+        # listeners already hold is exactly what BlueZ rejects with
+        # "Operation already in progress", which left the Renogy dark beside a
+        # working shunt. A GATT connect still coexists with that one scan.
+        if self._hub is None:
+            raise DeviceError("no BLE scanner hub was set for this device")
+        await self._hub.ensure_started()
         if self.alias:
-            log.info("[%s] scanning %.0fs for alias %r", self.name, self.scan_timeout, self.alias)
-            return await BleakScanner.find_device_by_name(
-                self.alias, timeout=self.scan_timeout, bluez=self._scanner_args()
-            )
-        log.info("[%s] scanning %.0fs for %s", self.name, self.scan_timeout, self.address)
-        return await BleakScanner.find_device_by_address(
-            self.address, timeout=self.scan_timeout, bluez=self._scanner_args()
-        )
+            log.info("[%s] waiting %.0fs for alias %r via the shared scanner",
+                     self.name, self.scan_timeout, self.alias)
+            return await self._hub.get_device(name=self.alias, timeout=self.scan_timeout)
+        log.info("[%s] waiting %.0fs for %s via the shared scanner",
+                 self.name, self.scan_timeout, self.address)
+        return await self._hub.get_device(self.address, timeout=self.scan_timeout)
 
     async def _open_client(self, target: BLEDevice | str) -> BleakClient:
         client_args: BlueZClientArgs = {"adapter": self.adapter} if self.adapter else {}

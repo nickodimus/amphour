@@ -36,8 +36,7 @@ import re
 from collections.abc import AsyncIterator
 from typing import Any
 
-from bleak import BleakScanner
-
+from ...ble import ScannerHub
 from ...device import Device, DeviceError, StreamingDevice
 from ...fields import Field
 from ...reading import Reading
@@ -95,9 +94,14 @@ class VictronBLEDevice(StreamingDevice):
                 f"encryption key must be {protocol.KEY_LEN} bytes "
                 f"({protocol.KEY_LEN * 2} hex characters), got {len(self._key)}"
             )
-        self._scanner: BleakScanner | None = None
+        self._hub: ScannerHub | None = None
+        self._sub: int | None = None
         self._queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=8)
         self._unhandled: set[int] = set()
+
+    def set_hub(self, hub: ScannerHub) -> None:
+        """Injected by the CLI: the shared scanner for this device's adapter."""
+        self._hub = hub
 
     def _on_advertisement(self, device: Any, advertisement: Any) -> None:
         if device.address.upper() != self.address:
@@ -124,15 +128,13 @@ class VictronBLEDevice(StreamingDevice):
         return False
 
     async def open(self) -> None:
-        kwargs: dict[str, Any] = {"detection_callback": self._on_advertisement}
-        if self.adapter:
-            kwargs["adapter"] = self.adapter
-        scanner = BleakScanner(**kwargs)
+        if self._hub is None:
+            raise DeviceError("no BLE scanner hub was set for this device")
         try:
-            await scanner.start()
+            await self._hub.ensure_started()
         except Exception as exc:  # bleak raises BleakError and OSError alike
             raise DeviceError(f"could not start BLE scan: {exc}") from exc
-        self._scanner = scanner
+        self._sub = self._hub.subscribe(self._on_advertisement)
         log.info(
             "[%s] listening for Victron advertisements from %s%s",
             self.name,
@@ -141,10 +143,11 @@ class VictronBLEDevice(StreamingDevice):
         )
 
     async def close(self) -> None:
-        scanner, self._scanner = self._scanner, None
-        if scanner is not None:
-            with contextlib.suppress(Exception):
-                await scanner.stop()
+        # The scanner is shared and owned by the hub; only drop this device's
+        # subscription, never stop the radio the other drivers are using.
+        if self._sub is not None and self._hub is not None:
+            self._hub.unsubscribe(self._sub)
+        self._sub = None
         while not self._queue.empty():
             self._queue.get_nowait()
 
