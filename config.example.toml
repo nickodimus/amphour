@@ -134,6 +134,15 @@ batch_size = 60
 flush_interval = 60.0
 timeout = 10.0
 
+# What happens to a write the server could not be reached for. Empty (the
+# default) drops it. Set a directory and it is kept on disk there instead, and
+# replayed oldest first once the server answers - see the README, "Riding out
+# an outage". The directory is created at startup; amphour refuses to start if
+# it cannot write there. spool_max_mb caps it: past the cap the OLDEST data is
+# deleted. Five devices at a 30 s cadence fill about 7 MB a day.
+spool_dir = ""
+spool_max_mb = 64
+
 # Extra tags applied to every point. The `device` tag is added automatically.
 [influxdb.tags]
 site = "home"

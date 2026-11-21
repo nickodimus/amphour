@@ -10,7 +10,8 @@ class Sink(Protocol):
     """Somewhere a Reading can be published.
 
     publish() must not raise for transient problems - a sink that cannot
-    reach its destination logs and drops, so one bad sink never stops the
+    reach its destination logs and drops (or, like the InfluxDB sink with a
+    spool configured, sets the data aside), so one bad sink never stops the
     poll loop or another sink.
     """
 

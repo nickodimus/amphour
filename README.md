@@ -177,6 +177,49 @@ An unrecognised option is an error rather than a silently ignored default — a
 typo that gets dropped is how a setting appears to be applied without being
 applied.
 
+### Riding out an outage: the InfluxDB spool
+
+By default a write InfluxDB could not be reached for is logged and dropped. The
+sink buffers in memory, and a buffer that grows while the server is away would
+exhaust a small board. That default lost 19.7 hours of readings on 2026-11-04,
+when the network path went away and the collector kept running.
+
+Set a directory and undelivered batches go to disk instead:
+
+```toml
+[influxdb]
+spool_dir = "/home/you/.local/state/amphour/spool"
+spool_max_mb = 64
+```
+
+- **Replay.** After each successful live write, one spooled segment (about
+  256 KB) is sent, oldest first, and deleted once the server accepts it. Live
+  readings are never queued behind the backlog; a day's outage drains in about
+  half an hour. Replaying twice is harmless: each line carries the time its
+  reading was taken, and InfluxDB overwrites a point with the same series and
+  timestamp.
+- **Bounded.** Past `spool_max_mb` the oldest segments are deleted, with a log
+  line. Five devices at a 30 s cadence write about 7 MB a day.
+- **Refused data is not kept.** A 400 or 413 means the server looked at the
+  data and said no; it has already stored every point it could parse, and
+  replaying the rest would fail forever in front of everything behind it. Any
+  other failure (no connection, a timeout, a 5xx, a login or missing-database
+  error) keeps the data.
+- **A clock that was never set is not trusted.** On a board with no RTC that
+  reboots while offline, the clock is stale and so is every timestamp. Those
+  readings would replay into the past, over real points. So a batch is spooled
+  only if systemd-timesyncd has synchronised since boot or the host has a
+  hardware clock; otherwise it is dropped as before, and the log says why.
+- **Your downsamples will not see it.** A continuous query that looks back a
+  few minutes never notices points that arrive hours late. When the spool
+  empties, amphour logs `influxdb spool drained: replayed N points taken X to
+  Y`; re-run the downsample over that span.
+
+Every failed write still logs a line containing `influxdb write`, spooled or
+not, so whatever watches the journal sees the outage either way. A retention
+policy shorter than the outage rejects the points that are already too old
+when they are replayed; nothing can be done about those from this side.
+
 ### Migrating from `solar-bt-monitor`
 
 Set `metric_prefix = "solarmon_"` and existing dashboards keep working through

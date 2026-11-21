@@ -61,6 +61,10 @@ class InfluxConfig:
     flush_interval: float = 60.0
     timeout: float = 10.0
     include_unverified: bool = False
+    # Where undelivered writes wait for the server to come back. None (or an
+    # empty string in the file) means no spool: a failed write is dropped.
+    spool_dir: str | None = None
+    spool_max_mb: int = 64
     tags: dict[str, str] = field(default_factory=dict)
 
 
@@ -151,13 +155,17 @@ def from_dict(raw: dict[str, Any]) -> Config:
         influx_raw["username"] = env_user
     if env_pass is not None:
         influx_raw["password"] = env_pass
-    for key in ("username", "password", "retention_policy"):
+    for key in ("username", "password", "retention_policy", "spool_dir"):
         if influx_raw.get(key) == "":
             influx_raw[key] = None
 
     influx = InfluxConfig(**influx_raw, tags={str(k): str(v) for k, v in tags.items()})
     if influx.enabled and not (influx.url and influx.database):
         raise ConfigError("[influxdb] enabled requires both url and database")
+    if isinstance(influx.spool_max_mb, bool) or not isinstance(influx.spool_max_mb, int):
+        raise ConfigError("[influxdb] spool_max_mb must be a whole number of megabytes")
+    if influx.spool_max_mb <= 0:
+        raise ConfigError("[influxdb] spool_max_mb must be greater than zero")
 
     config = Config(
         devices=devices,

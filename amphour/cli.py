@@ -128,8 +128,8 @@ def _build_sinks(config: Config, devices: list[Device]) -> tuple[list[Sink], obj
     if config.influxdb.enabled:
         from .sinks.influx import InfluxSink
 
-        sinks.append(
-            InfluxSink(
+        try:
+            influx = InfluxSink(
                 devices,
                 url=config.influxdb.url,
                 database=config.influxdb.database,
@@ -142,8 +142,16 @@ def _build_sinks(config: Config, devices: list[Device]) -> tuple[list[Sink], obj
                 flush_interval=config.influxdb.flush_interval,
                 timeout=config.influxdb.timeout,
                 retention_policy=config.influxdb.retention_policy,
+                spool_dir=config.influxdb.spool_dir,
+                spool_max_mb=config.influxdb.spool_max_mb,
             )
-        )
+        except OSError as exc:
+            # The only file the sink touches at construction is its spool
+            # directory. Say so at startup rather than at the first outage.
+            raise ConfigError(
+                f"[influxdb] spool_dir {config.influxdb.spool_dir!r} cannot be used: {exc}"
+            ) from exc
+        sinks.append(influx)
     return sinks, prometheus
 
 
